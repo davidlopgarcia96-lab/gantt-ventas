@@ -1,0 +1,1794 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gestor de Proyectos - Diagrama de Gantt</title>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --panel: #ffffff;
+      --text: #182033;
+      --muted: #667085;
+      --border: #dce3ee;
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --success: #16a34a;
+      --warning: #f59e0b;
+      --danger: #dc2626;
+      --info: #0ea5e9;
+      --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .app {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .title-group h1 {
+      margin: 0 0 4px;
+      font-size: clamp(24px, 3vw, 36px);
+    }
+
+    .title-group p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    button, input, select, textarea {
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-weight: 700;
+      transition: .2s ease;
+    }
+
+    button:hover { transform: translateY(-1px); }
+
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-secondary { background: #e8eef8; color: var(--text); }
+    .btn-danger { background: #fee2e2; color: #991b1b; }
+    .btn-success { background: #dcfce7; color: #166534; }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(160px, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .summary-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+    }
+
+    .summary-card span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+
+    .summary-card strong {
+      font-size: 26px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      margin-bottom: 18px;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .panel-header h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .filters {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+    }
+
+    input, select, textarea {
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 9px 10px;
+      background: #fff;
+      color: var(--text);
+      min-width: 130px;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .content-padding { padding: 16px; }
+
+    .member-manager {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .members-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .member-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #eef4ff;
+      border: 1px solid #cbdafe;
+      border-radius: 999px;
+      padding: 7px 10px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .member-chip button {
+      padding: 0;
+      background: transparent;
+      color: var(--danger);
+      font-size: 15px;
+    }
+
+    .color-picker {
+      width: 30px;
+      height: 26px;
+      min-width: 30px;
+      padding: 2px;
+      border-radius: 7px;
+      cursor: pointer;
+      background: #fff;
+    }
+
+    .palette-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .palette-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 10px;
+      background: #f8fafc;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .color-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+      flex: 0 0 auto;
+      border: 1px solid rgba(15,23,42,.18);
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 14px;
+      margin-bottom: 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 1150px;
+    }
+
+    th, td {
+      border-bottom: 1px solid var(--border);
+      padding: 10px;
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    th {
+      background: #f8fafc;
+      color: #475467;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+
+    td input, td select {
+      width: 100%;
+      min-width: 110px;
+    }
+
+    .project-name { min-width: 220px; }
+    .notes { min-width: 220px; }
+
+    .status-badge {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 5px 9px;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .status-pending { background: #f3f4f6; color: #4b5563; }
+    .status-progress { background: #dbeafe; color: #1d4ed8; }
+    .status-done { background: #dcfce7; color: #166534; }
+    .status-delayed { background: #fee2e2; color: #991b1b; }
+
+    .progress-wrap {
+      min-width: 150px;
+    }
+
+    .progress-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .progress-row input[type="range"] {
+      min-width: 100px;
+      padding: 0;
+    }
+
+    .progress-label {
+      font-weight: 800;
+      min-width: 42px;
+    }
+
+    .gantt-container {
+      width: 100%;
+      max-width: 100%;
+      overflow-x: auto;
+      overflow-y: visible;
+      padding-bottom: 18px;
+      scrollbar-gutter: stable;
+      overscroll-behavior-x: contain;
+    }
+
+    .gantt-container::-webkit-scrollbar {
+      height: 14px;
+    }
+
+    .gantt-container::-webkit-scrollbar-track {
+      background: #e9eef6;
+      border-radius: 999px;
+    }
+
+    .gantt-container::-webkit-scrollbar-thumb {
+      background: #94a3b8;
+      border: 3px solid #e9eef6;
+      border-radius: 999px;
+    }
+
+    .gantt {
+      width: max-content;
+      min-width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: visible;
+    }
+
+    .gantt-header, .gantt-row {
+      display: grid;
+      grid-template-columns: 260px max-content;
+      width: max-content;
+      min-width: 100%;
+    }
+
+    .gantt-name {
+      padding: 10px 12px;
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      background: #fff;
+      font-size: 13px;
+      position: sticky;
+      left: 0;
+      z-index: 3;
+    }
+
+    .gantt-header .gantt-name {
+      background: #f8fafc;
+      font-weight: 800;
+      z-index: 4;
+    }
+
+    .timeline {
+      position: relative;
+      min-height: 48px;
+      border-bottom: 1px solid var(--border);
+      background-image: linear-gradient(to right, rgba(148, 163, 184, .25) 1px, transparent 1px);
+      background-size: var(--day-width, 24px) 100%;
+    }
+
+    .timeline-header {
+      display: grid;
+      background: #f8fafc;
+    }
+
+    .day-cell {
+      min-width: 24px;
+      text-align: center;
+      font-size: 10px;
+      padding: 5px 2px;
+      border-right: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    .day-cell strong {
+      display: block;
+      color: var(--text);
+      font-size: 11px;
+    }
+
+    .bar {
+      position: absolute;
+      top: 9px;
+      height: 30px;
+      border-radius: 8px;
+      min-width: 8px;
+      overflow: hidden;
+      background: #dbeafe;
+      border: 1px solid #93c5fd;
+      box-shadow: 0 3px 10px rgba(37, 99, 235, .15);
+    }
+
+    .bar-progress {
+      height: 100%;
+      background: var(--primary);
+      opacity: .85;
+    }
+
+    .bar-label {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      font-size: 11px;
+      font-weight: 800;
+      color: #0f172a;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .empty {
+      text-align: center;
+      color: var(--muted);
+      padding: 28px;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, .55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 20;
+    }
+
+    .modal-backdrop.show { display: flex; }
+
+    .modal {
+      background: #fff;
+      width: min(700px, 100%);
+      max-height: 92vh;
+      overflow-y: auto;
+      border-radius: 18px;
+      box-shadow: 0 30px 70px rgba(15, 23, 42, .3);
+    }
+
+    .modal-header, .modal-footer {
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .modal-footer {
+      border-top: 1px solid var(--border);
+      border-bottom: 0;
+      justify-content: flex-end;
+    }
+
+    .modal-body {
+      padding: 16px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .modal-body .full { grid-column: 1 / -1; }
+
+    .hint {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+
+
+    .screen-nav {
+      display: flex;
+      gap: 8px;
+      padding: 6px;
+      margin-bottom: 18px;
+      background: #e8eef8;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      width: fit-content;
+    }
+
+    .screen-tab {
+      background: transparent;
+      color: var(--muted);
+      padding: 11px 18px;
+    }
+
+    .screen-tab.active {
+      background: var(--panel);
+      color: var(--primary);
+      box-shadow: 0 3px 10px rgba(15, 23, 42, .08);
+    }
+
+    .app-screen { display: none; }
+    .app-screen.active { display: block; }
+
+    .screen-intro {
+      background: linear-gradient(135deg, #eff6ff, #ffffff);
+      border: 1px solid #bfdbfe;
+      border-radius: 16px;
+      padding: 16px 18px;
+      margin-bottom: 18px;
+    }
+
+    .screen-intro h2 { margin: 0 0 5px; }
+    .screen-intro p { margin: 0; color: var(--muted); }
+
+    @media (max-width: 900px) {
+      .summary-grid { grid-template-columns: repeat(2, 1fr); }
+      .modal-body { grid-template-columns: 1fr; }
+      .modal-body .full { grid-column: auto; }
+    }
+
+    @media (max-width: 560px) {
+      .app { padding: 14px; }
+      .summary-grid { grid-template-columns: 1fr; }
+      .member-manager { grid-template-columns: 1fr; }
+      .actions button { flex: 1; }
+    }
+
+    .cloud-status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      background: #eef4ff;
+      border: 1px solid #cbdafe;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .cloud-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #f59e0b;
+    }
+    .cloud-dot.online { background: #16a34a; }
+    .cloud-dot.error { background: #dc2626; }
+    .auth-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: linear-gradient(135deg, #eff6ff, #f8fafc);
+    }
+    .auth-overlay.hidden { display: none; }
+    .auth-card {
+      width: min(460px, 100%);
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      box-shadow: 0 30px 80px rgba(15, 23, 42, .18);
+      padding: 24px;
+    }
+    .auth-card h1 { margin: 0 0 8px; font-size: 26px; }
+    .auth-card p { margin: 0 0 18px; color: var(--muted); }
+    .auth-grid { display: grid; gap: 12px; }
+    .auth-actions { display: flex; gap: 10px; margin-top: 4px; }
+    .auth-actions button { flex: 1; }
+    .auth-message { min-height: 22px; margin-top: 12px; font-size: 13px; color: var(--danger); }
+    .setup-box {
+      margin-top: 14px;
+      padding: 12px;
+      border-radius: 12px;
+      background: #fff7ed;
+      border: 1px solid #fed7aa;
+      color: #9a3412;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    body.viewer-mode #configurationTab { display: none; }
+    body.viewer-mode #configurationScreen { display: none !important; }
+
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <div class="title-group">
+        <h1>Gestor de Proyectos</h1>
+        <p>Diagrama de Gantt compartido y sincronizado en tiempo real.</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div class="cloud-status">
+          <span class="cloud-dot" id="cloudDot"></span>
+          <span id="cloudStatus">Conectando…</span>
+        </div>
+      </div>
+      <div class="actions" id="configurationActions">
+        <button class="btn-primary" id="addProjectBtn">+ Nuevo proyecto</button>
+      </div>
+    </div>
+
+    <nav class="screen-nav" aria-label="Navegación principal">
+      <button class="screen-tab active" id="configurationTab" data-screen="configurationScreen">⚙ Configuración</button>
+      <button class="screen-tab" id="ganttTab" data-screen="ganttScreen">▦ Diagrama de Gantt</button>
+    </nav>
+
+    <div id="configurationScreen" class="app-screen active">
+      <div class="screen-intro">
+        <h2>Configuración y captura</h2>
+        <p>Administra integrantes, colores, procesos, proyectos, responsables, fechas y avances.</p>
+      </div>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Integrantes del equipo</h2>
+      </div>
+      <div class="content-padding">
+        <div class="member-manager">
+          <div class="field">
+            <label for="memberName">Nombre del integrante</label>
+            <input id="memberName" placeholder="Ej. Ana López" />
+          </div>
+          <button class="btn-success" id="addMemberBtn">Agregar integrante</button>
+        </div>
+        <div class="members-list" id="membersList"></div>
+        <p class="hint">El color de cada integrante se utiliza como color base de sus proyectos en el Gantt.</p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Colores de los procesos</h2>
+      </div>
+      <div class="content-padding">
+        <div class="palette-grid" id="processPalette"></div>
+        <p class="hint">El color del proceso se muestra en el avance de cada barra y en la etiqueta de proceso.</p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Proyectos y tareas</h2>
+        <div class="filters">
+          <select id="filterMember">
+            <option value="">Todos los integrantes</option>
+          </select>
+          <select id="filterStatus">
+            <option value="">Todos los estados</option>
+            <option value="Pendiente">Pendiente</option>
+            <option value="En progreso">En progreso</option>
+            <option value="Completado">Completado</option>
+            <option value="Retrasado">Retrasado</option>
+          </select>
+          <select id="filterProcess">
+            <option value="">Todos los procesos</option>
+          </select>
+          <input id="searchProject" placeholder="Buscar proyecto..." />
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Proyecto</th>
+              <th>Responsable</th>
+              <th>Inicio</th>
+              <th>Fin</th>
+              <th>Estado</th>
+              <th>Proceso</th>
+              <th>Avance</th>
+              <th>Notas</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="projectsTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    </div>
+
+    <div id="ganttScreen" class="app-screen">
+      <div class="screen-intro">
+        <h2>Vista del Diagrama de Gantt</h2>
+        <p>Consulta la programación, los responsables, el proceso actual y el porcentaje de avance.</p>
+      </div>
+
+    <section class="summary-grid">
+      <article class="summary-card"><span>Total de proyectos</span><strong id="totalProjects">0</strong></article>
+      <article class="summary-card"><span>En progreso</span><strong id="inProgressProjects">0</strong></article>
+      <article class="summary-card"><span>Completados</span><strong id="completedProjects">0</strong></article>
+      <article class="summary-card"><span>Retrasados</span><strong id="delayedProjects">0</strong></article>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Diagrama de Gantt</h2>
+        <div class="filters">
+          <label style="display:flex;align-items:center;gap:8px;">
+            Integrante
+            <select id="ganttFilterMember">
+              <option value="">Todos los integrantes</option>
+            </select>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;">
+            Escala
+            <select id="dayWidth">
+              <option value="20">Compacta</option>
+              <option value="28" selected>Normal</option>
+              <option value="38">Amplia</option>
+            </select>
+          </label>
+          <button class="btn-secondary" id="exportBtn">Exportar Gantt a PNG</button>
+        </div>
+      </div>
+      <div class="content-padding gantt-container">
+        <div class="legend" id="ganttLegend"></div>
+        <div id="gantt"></div>
+      </div>
+    </section>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="projectModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="modalTitle" style="margin:0;">Nuevo proyecto</h2>
+        <button class="btn-secondary" id="closeModalBtn">Cerrar</button>
+      </div>
+      <form id="projectForm">
+        <div class="modal-body">
+          <input type="hidden" id="projectId" />
+          <div class="field full">
+            <label for="projectName">Nombre del proyecto</label>
+            <input id="projectName" required placeholder="Ej. Rediseño del sitio web" />
+          </div>
+          <div class="field">
+            <label for="projectMember">Responsable</label>
+            <select id="projectMember"></select>
+          </div>
+          <div class="field">
+            <label for="projectStatus">Estado</label>
+            <select id="projectStatus">
+              <option>Pendiente</option>
+              <option>En progreso</option>
+              <option>Completado</option>
+              <option>Retrasado</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="projectProcess">Proceso actual</label>
+            <select id="projectProcess"></select>
+          </div>
+          <div class="field">
+            <label for="projectStart">Fecha de inicio</label>
+            <input id="projectStart" type="date" required />
+          </div>
+          <div class="field">
+            <label for="projectEnd">Fecha de fin</label>
+            <input id="projectEnd" type="date" required />
+          </div>
+          <div class="field full">
+            <label for="projectProgress">Avance: <span id="modalProgressValue">0%</span></label>
+            <input id="projectProgress" type="range" min="0" max="100" value="0" />
+          </div>
+          <div class="field full">
+            <label for="projectNotes">Notas</label>
+            <textarea id="projectNotes" placeholder="Observaciones, pendientes, entregables..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" id="cancelModalBtn">Cancelar</button>
+          <button type="submit" class="btn-primary">Guardar proyecto</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
+    import {
+      getFirestore, doc, setDoc, onSnapshot,
+      serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
+    import { firebaseConfig } from "./firebase-config.js";
+
+    const STORAGE_KEY = "gantt_project_manager_v1";
+
+    const DEFAULT_MEMBER_COLORS = ["#2563eb", "#16a34a", "#9333ea", "#ea580c", "#0891b2", "#db2777", "#4f46e5", "#65a30d"];
+
+    const DEFAULT_PROCESS_COLORS = {
+      "RNO": "#64748b",
+      "Hist. y Crit.": "#2563eb",
+      "Rfmto.": "#7c3aed",
+      "Rev. Doc.": "#0ea5e9",
+      "Firmas": "#db2777",
+      "Estim.": "#f59e0b",
+      "Prog.": "#ea580c",
+      "Val. Gest.": "#14b8a6",
+      "Val. Area": "#16a34a",
+      "Proc. Int. Prod.": "#84cc16",
+      "Lib. Prod.": "#15803d"
+    };
+
+    const defaultData = {
+      members: ["Ana López", "Carlos Méndez", "Mariana Ruiz"],
+      memberColors: {
+        "Ana López": "#2563eb",
+        "Carlos Méndez": "#16a34a",
+        "Mariana Ruiz": "#9333ea"
+      },
+      processColors: { ...DEFAULT_PROCESS_COLORS },
+      projects: [
+        {
+          id: crypto.randomUUID(),
+          name: "Planeación inicial",
+          member: "Ana López",
+          start: todayISO(),
+          end: addDaysISO(5),
+          status: "En progreso",
+          process: "Hist. y Crit.",
+          progress: 45,
+          notes: "Definición de alcance y entregables."
+        },
+        {
+          id: crypto.randomUUID(),
+          name: "Diseño y prototipo",
+          member: "Mariana Ruiz",
+          start: addDaysISO(3),
+          end: addDaysISO(12),
+          status: "Pendiente",
+          process: "Rfmto.",
+          progress: 10,
+          notes: "Preparar propuesta visual."
+        },
+        {
+          id: crypto.randomUUID(),
+          name: "Implementación",
+          member: "Carlos Méndez",
+          start: addDaysISO(10),
+          end: addDaysISO(25),
+          status: "Pendiente",
+          process: "Rev. Doc.",
+          progress: 0,
+          notes: "Desarrollo y pruebas internas."
+        }
+      ]
+    };
+
+    const PROCESS_OPTIONS = [
+      "RNO",
+      "Hist. y Crit.",
+      "Rfmto.",
+      "Rev. Doc.",
+      "Firmas",
+      "Estim.",
+      "Prog.",
+      "Val. Gest.",
+      "Val. Area",
+      "Proc. Int. Prod.",
+      "Lib. Prod."
+    ];
+
+    let state = loadState();
+    let firebaseApp = null;
+    let db = null;
+    let sharedDocRef = null;
+    let unsubscribeShared = null;
+    let applyingRemoteState = false;
+    let saveTimer = null;
+
+    const els = {
+      configurationScreen: document.getElementById("configurationScreen"),
+      ganttScreen: document.getElementById("ganttScreen"),
+      configurationTab: document.getElementById("configurationTab"),
+      ganttTab: document.getElementById("ganttTab"),
+      configurationActions: document.getElementById("configurationActions"),
+      totalProjects: document.getElementById("totalProjects"),
+      inProgressProjects: document.getElementById("inProgressProjects"),
+      completedProjects: document.getElementById("completedProjects"),
+      delayedProjects: document.getElementById("delayedProjects"),
+      membersList: document.getElementById("membersList"),
+      processPalette: document.getElementById("processPalette"),
+      ganttLegend: document.getElementById("ganttLegend"),
+      memberName: document.getElementById("memberName"),
+      addMemberBtn: document.getElementById("addMemberBtn"),
+      filterMember: document.getElementById("filterMember"),
+      ganttFilterMember: document.getElementById("ganttFilterMember"),
+      filterStatus: document.getElementById("filterStatus"),
+      filterProcess: document.getElementById("filterProcess"),
+      searchProject: document.getElementById("searchProject"),
+      projectsTableBody: document.getElementById("projectsTableBody"),
+      gantt: document.getElementById("gantt"),
+      addProjectBtn: document.getElementById("addProjectBtn"),
+      exportBtn: document.getElementById("exportBtn"),
+      dayWidth: document.getElementById("dayWidth"),
+      projectModal: document.getElementById("projectModal"),
+      modalTitle: document.getElementById("modalTitle"),
+      projectForm: document.getElementById("projectForm"),
+      projectId: document.getElementById("projectId"),
+      projectName: document.getElementById("projectName"),
+      projectMember: document.getElementById("projectMember"),
+      projectStatus: document.getElementById("projectStatus"),
+      projectProcess: document.getElementById("projectProcess"),
+      projectStart: document.getElementById("projectStart"),
+      projectEnd: document.getElementById("projectEnd"),
+      projectProgress: document.getElementById("projectProgress"),
+      modalProgressValue: document.getElementById("modalProgressValue"),
+      projectNotes: document.getElementById("projectNotes"),
+      closeModalBtn: document.getElementById("closeModalBtn"),
+      cancelModalBtn: document.getElementById("cancelModalBtn"),
+      cloudDot: document.getElementById("cloudDot"),
+      cloudStatus: document.getElementById("cloudStatus")
+    };
+
+    function todayISO() {
+      const d = new Date();
+      d.setHours(0,0,0,0);
+      return dateToISO(d);
+    }
+
+    function addDaysISO(days) {
+      const d = new Date();
+      d.setHours(0,0,0,0);
+      d.setDate(d.getDate() + days);
+      return dateToISO(d);
+    }
+
+    function dateToISO(date) {
+      return [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, "0"),
+        String(date.getDate()).padStart(2, "0")
+      ].join("-");
+    }
+
+    function parseDate(value) {
+      const [y, m, d] = value.split("-").map(Number);
+      return new Date(y, m - 1, d);
+    }
+
+    function diffDays(start, end) {
+      return Math.round((end - start) / 86400000);
+    }
+
+    function normalizeState(parsed) {
+      const source = parsed && parsed.state ? parsed.state : parsed;
+      const members = Array.isArray(source?.members) ? source.members : [];
+      const memberColors = source?.memberColors && typeof source.memberColors === "object"
+        ? source.memberColors : {};
+      members.forEach((member, index) => {
+        if (!memberColors[member]) {
+          memberColors[member] = DEFAULT_MEMBER_COLORS[index % DEFAULT_MEMBER_COLORS.length];
+        }
+      });
+      return {
+        members,
+        memberColors,
+        processColors: { ...DEFAULT_PROCESS_COLORS, ...(source?.processColors || {}) },
+        projects: Array.isArray(source?.projects)
+          ? source.projects.map(project => ({ process: "RNO", ...project }))
+          : []
+      };
+    }
+
+    function loadState() {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        return saved ? normalizeState(JSON.parse(saved)) : structuredClone(defaultData);
+      } catch {
+        return structuredClone(defaultData);
+      }
+    }
+
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      if (applyingRemoteState || !sharedDocRef) return;
+
+      clearTimeout(saveTimer);
+      setCloudStatus("Guardando…");
+      saveTimer = setTimeout(async () => {
+        try {
+          await setDoc(sharedDocRef, {
+            state,
+            updatedAt: serverTimestamp(),
+            updatedBy: "Enlace compartido"
+          });
+          setCloudStatus("Sincronizado", "online");
+        } catch (error) {
+          console.error(error);
+          setCloudStatus("Error al guardar", "error");
+          alert("No se pudo guardar en la nube. Revisa tu conexión y las reglas de Firestore.");
+        }
+      }, 250);
+    }
+
+
+    function isFirebaseConfigured() {
+      return firebaseConfig &&
+        firebaseConfig.apiKey &&
+        !String(firebaseConfig.apiKey).includes("REEMPLAZA") &&
+        firebaseConfig.projectId &&
+        !String(firebaseConfig.projectId).includes("REEMPLAZA");
+    }
+
+    function setCloudStatus(text, mode = "") {
+      els.cloudStatus.textContent = text;
+      els.cloudDot.className = "cloud-dot" + (mode ? " " + mode : "");
+    }
+
+    function subscribeToSharedData() {
+      if (unsubscribeShared) unsubscribeShared();
+      sharedDocRef = doc(db, "shared", "gantt");
+
+      unsubscribeShared = onSnapshot(sharedDocRef, async snapshot => {
+        try {
+          if (!snapshot.exists()) {
+            await setDoc(sharedDocRef, {
+              state,
+              updatedAt: serverTimestamp(),
+              updatedBy: "Configuración inicial"
+            });
+            return;
+          }
+
+          applyingRemoteState = true;
+          state = normalizeState(snapshot.data());
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+          render();
+          applyingRemoteState = false;
+          setCloudStatus("Sincronizado", "online");
+        } catch (error) {
+          applyingRemoteState = false;
+          console.error(error);
+          setCloudStatus("Error de sincronización", "error");
+        }
+      }, error => {
+        console.error(error);
+        setCloudStatus("Sin acceso a los datos", "error");
+      });
+    }
+
+    async function initializeFirebaseSync() {
+      if (!isFirebaseConfigured()) {
+        setCloudStatus("Falta configuración", "error");
+        alert("Falta colocar la configuración de Firebase en firebase-config.js.");
+        return;
+      }
+
+      try {
+        firebaseApp = initializeApp(firebaseConfig);
+        db = getFirestore(firebaseApp);
+        setCloudStatus("Conectando…");
+        subscribeToSharedData();
+      } catch (error) {
+        console.error(error);
+        setCloudStatus("Error de configuración", "error");
+        alert("No se pudo conectar con Firebase. Revisa firebase-config.js.");
+      }
+    }
+
+    function sortProjectsByDate(projects) {
+      return [...projects].sort((a, b) => {
+        const startDifference = parseDate(a.start) - parseDate(b.start);
+        if (startDifference !== 0) return startDifference;
+
+        const endDifference = parseDate(a.end) - parseDate(b.end);
+        if (endDifference !== 0) return endDifference;
+
+        return String(a.name || "").localeCompare(
+          String(b.name || ""),
+          "es",
+          { sensitivity: "base", numeric: true }
+        );
+      });
+    }
+
+    function getFilteredProjects() {
+      const member = els.filterMember.value;
+      const status = els.filterStatus.value;
+      const process = els.filterProcess.value;
+      const search = els.searchProject.value.trim().toLowerCase();
+
+      const filtered = state.projects.filter(project => {
+        const memberOk = !member || project.member === member;
+        const statusOk = !status || project.status === status;
+        const processOk = !process || (project.process || "RNO") === process;
+        const searchOk = !search || project.name.toLowerCase().includes(search) ||
+          (project.notes || "").toLowerCase().includes(search);
+        return memberOk && statusOk && processOk && searchOk;
+      });
+
+      return sortProjectsByDate(filtered);
+    }
+
+    function getGanttProjects() {
+      const member = els.ganttFilterMember.value;
+      const filtered = state.projects.filter(project => !member || project.member === member);
+      return sortProjectsByDate(filtered);
+    }
+
+    function switchScreen(screenId) {
+      const showConfiguration = screenId === "configurationScreen";
+      els.configurationScreen.classList.toggle("active", showConfiguration);
+      els.ganttScreen.classList.toggle("active", !showConfiguration);
+      els.configurationTab.classList.toggle("active", showConfiguration);
+      els.ganttTab.classList.toggle("active", !showConfiguration);
+      els.configurationActions.style.display = showConfiguration ? "flex" : "none";
+      localStorage.setItem("gantt_active_screen", screenId);
+      if (!showConfiguration) {
+        renderSummary();
+        renderGantt();
+      }
+    }
+
+    function render() {
+      renderSummary();
+      renderMembers();
+      renderProcessPalette();
+      renderMemberOptions();
+      renderProcessOptions();
+      renderTable();
+      renderGantt();
+    }
+
+    function renderSummary() {
+      const projects = getGanttProjects();
+      els.totalProjects.textContent = projects.length;
+      els.inProgressProjects.textContent = projects.filter(p => p.status === "En progreso").length;
+      els.completedProjects.textContent = projects.filter(p => p.status === "Completado").length;
+      els.delayedProjects.textContent = projects.filter(p => p.status === "Retrasado").length;
+    }
+
+    function renderMembers() {
+      els.membersList.innerHTML = "";
+      if (!state.members.length) {
+        els.membersList.innerHTML = '<div class="empty">No hay integrantes registrados.</div>';
+        return;
+      }
+
+      state.members.forEach(member => {
+        const chip = document.createElement("div");
+        chip.className = "member-chip";
+        const color = state.memberColors?.[member] || "#64748b";
+        chip.innerHTML = `<span class="color-dot" style="background:${color}"></span><span>${escapeHTML(member)}</span><input class="color-picker" type="color" value="${color}" title="Color de ${escapeAttribute(member)}"><button title="Eliminar integrante">×</button>`;
+        chip.querySelector('input[type="color"]').addEventListener("input", event => {
+          state.memberColors[member] = event.target.value;
+          saveState();
+          renderGantt();
+        });
+        chip.querySelector("button").addEventListener("click", () => removeMember(member));
+        els.membersList.appendChild(chip);
+      });
+    }
+
+    function renderProcessPalette() {
+      els.processPalette.innerHTML = "";
+      PROCESS_OPTIONS.forEach(process => {
+        const item = document.createElement("div");
+        item.className = "palette-item";
+        const color = state.processColors?.[process] || DEFAULT_PROCESS_COLORS[process] || "#64748b";
+        item.innerHTML = `<span style="display:flex;align-items:center;gap:8px"><span class="color-dot" style="background:${color}"></span>${escapeHTML(process)}</span><input class="color-picker" type="color" value="${color}" title="Color de ${escapeAttribute(process)}">`;
+        item.querySelector('input[type="color"]').addEventListener("input", event => {
+          state.processColors[process] = event.target.value;
+          saveState();
+          renderTable();
+          renderGantt();
+        });
+        els.processPalette.appendChild(item);
+      });
+    }
+
+    function renderMemberOptions() {
+      const currentFilter = els.filterMember.value;
+      els.filterMember.innerHTML = '<option value="">Todos los integrantes</option>';
+      state.members.forEach(member => {
+        const option = new Option(member, member);
+        els.filterMember.add(option);
+      });
+      if (state.members.includes(currentFilter)) els.filterMember.value = currentFilter;
+
+      const currentGanttFilter = els.ganttFilterMember.value;
+      els.ganttFilterMember.innerHTML = '<option value="">Todos los integrantes</option>';
+      state.members.forEach(member => els.ganttFilterMember.add(new Option(member, member)));
+      if (state.members.includes(currentGanttFilter)) els.ganttFilterMember.value = currentGanttFilter;
+
+      const currentProjectMember = els.projectMember.value;
+      els.projectMember.innerHTML = "";
+      if (!state.members.length) {
+        els.projectMember.add(new Option("Sin asignar", ""));
+      } else {
+        state.members.forEach(member => els.projectMember.add(new Option(member, member)));
+      }
+      if (state.members.includes(currentProjectMember)) els.projectMember.value = currentProjectMember;
+    }
+
+    function renderProcessOptions() {
+      const currentFilter = els.filterProcess.value;
+      els.filterProcess.innerHTML = '<option value="">Todos los procesos</option>';
+      PROCESS_OPTIONS.forEach(process => els.filterProcess.add(new Option(process, process)));
+      if (PROCESS_OPTIONS.includes(currentFilter)) els.filterProcess.value = currentFilter;
+
+      const currentProjectProcess = els.projectProcess.value;
+      els.projectProcess.innerHTML = "";
+      PROCESS_OPTIONS.forEach(process => els.projectProcess.add(new Option(process, process)));
+      if (PROCESS_OPTIONS.includes(currentProjectProcess)) els.projectProcess.value = currentProjectProcess;
+    }
+
+    function renderTable() {
+      const projects = getFilteredProjects();
+      els.projectsTableBody.innerHTML = "";
+
+      if (!projects.length) {
+        els.projectsTableBody.innerHTML = '<tr><td colspan="9" class="empty">No hay proyectos que coincidan con los filtros.</td></tr>';
+        return;
+      }
+
+      projects.forEach(project => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td><input class="project-name" value="${escapeAttribute(project.name)}" data-field="name"></td>
+          <td><select data-field="member">${memberOptionsHTML(project.member)}</select></td>
+          <td><input type="date" value="${project.start}" data-field="start"></td>
+          <td><input type="date" value="${project.end}" data-field="end"></td>
+          <td>
+            <select data-field="status">
+              ${["Pendiente","En progreso","Completado","Retrasado"].map(s => `<option ${s === project.status ? "selected" : ""}>${s}</option>`).join("")}
+            </select>
+            <div style="margin-top:6px"><span class="status-badge ${statusClass(project.status)}">${project.status}</span></div>
+          </td>
+          <td>
+            <select data-field="process">
+              ${PROCESS_OPTIONS.map(process => `<option ${process === (project.process || "RNO") ? "selected" : ""}>${process}</option>`).join("")}
+            </select>
+            <div style="margin-top:6px"><span class="status-badge" style="background:${hexToRgba(getProcessColor(project.process), .16)};color:${getProcessColor(project.process)};border:1px solid ${hexToRgba(getProcessColor(project.process), .35)}">${escapeHTML(project.process || "RNO")}</span></div>
+          </td>
+          <td class="progress-wrap">
+            <div class="progress-row">
+              <input type="range" min="0" max="100" value="${project.progress}" data-field="progress">
+              <span class="progress-label">${project.progress}%</span>
+            </div>
+          </td>
+          <td><input class="notes" value="${escapeAttribute(project.notes || "")}" data-field="notes"></td>
+          <td>
+            <div style="display:flex;gap:6px;">
+              <button class="btn-secondary edit-btn">Editar</button>
+              <button class="btn-danger delete-btn">Eliminar</button>
+            </div>
+          </td>
+        `;
+
+        row.querySelectorAll("[data-field]").forEach(control => {
+          control.addEventListener("change", () => inlineUpdate(project.id, control));
+          if (control.matches('input[type="range"]')) {
+            control.addEventListener("input", () => {
+              control.parentElement.querySelector(".progress-label").textContent = control.value + "%";
+              inlineUpdate(project.id, control, false);
+            });
+          }
+        });
+
+        row.querySelector(".edit-btn").addEventListener("click", () => openProjectModal(project));
+        row.querySelector(".delete-btn").addEventListener("click", () => deleteProject(project.id));
+
+        els.projectsTableBody.appendChild(row);
+      });
+    }
+
+    function memberOptionsHTML(selected) {
+      if (!state.members.length) return '<option value="">Sin asignar</option>';
+      return state.members.map(member =>
+        `<option value="${escapeAttribute(member)}" ${member === selected ? "selected" : ""}>${escapeHTML(member)}</option>`
+      ).join("");
+    }
+
+    function inlineUpdate(id, control, rerender = true) {
+      const project = state.projects.find(p => p.id === id);
+      if (!project) return;
+      const field = control.dataset.field;
+      let value = control.value;
+      if (field === "progress") value = Number(value);
+
+      if ((field === "start" && value > project.end) || (field === "end" && value < project.start)) {
+        alert("La fecha de fin no puede ser anterior a la fecha de inicio.");
+        render();
+        return;
+      }
+
+      project[field] = value;
+      saveState();
+      if (rerender) render();
+      else {
+        renderSummary();
+        renderGantt();
+      }
+    }
+
+    function renderGantt() {
+      renderGanttLegend();
+      const projects = getGanttProjects();
+      if (!projects.length) {
+        els.gantt.innerHTML = '<div class="empty">No hay proyectos para mostrar en el diagrama.</div>';
+        return;
+      }
+
+      const dates = projects.flatMap(p => [parseDate(p.start), parseDate(p.end)]);
+      let minDate = new Date(Math.min(...dates));
+      let maxDate = new Date(Math.max(...dates));
+
+      minDate.setDate(minDate.getDate() - 2);
+      maxDate.setDate(maxDate.getDate() + 2);
+
+      const totalDays = diffDays(minDate, maxDate) + 1;
+      const dayWidth = Number(els.dayWidth.value);
+
+      const container = document.createElement("div");
+      container.className = "gantt";
+      container.style.setProperty("--day-width", dayWidth + "px");
+
+      const header = document.createElement("div");
+      header.className = "gantt-header";
+
+      const nameHeader = document.createElement("div");
+      nameHeader.className = "gantt-name";
+      nameHeader.textContent = "Proyecto / Responsable";
+
+      const timelineHeader = document.createElement("div");
+      timelineHeader.className = "timeline timeline-header";
+      timelineHeader.style.gridTemplateColumns = `repeat(${totalDays}, ${dayWidth}px)`;
+      timelineHeader.style.width = totalDays * dayWidth + "px";
+
+      for (let i = 0; i < totalDays; i++) {
+        const date = new Date(minDate);
+        date.setDate(minDate.getDate() + i);
+        const cell = document.createElement("div");
+        cell.className = "day-cell";
+        cell.innerHTML = `<strong>${date.getDate()}</strong>${date.toLocaleDateString("es-MX", { month: "short" })}`;
+        timelineHeader.appendChild(cell);
+      }
+
+      header.append(nameHeader, timelineHeader);
+      container.appendChild(header);
+
+      projects.forEach(project => {
+        const row = document.createElement("div");
+        row.className = "gantt-row";
+
+        const name = document.createElement("div");
+        name.className = "gantt-name";
+        const memberColor = getMemberColor(project.member);
+        const processColor = getProcessColor(project.process);
+        name.innerHTML = `<strong>${escapeHTML(project.name)}</strong><br><span style="color:var(--muted);display:inline-flex;align-items:center;gap:5px"><span class="color-dot" style="background:${memberColor}"></span>${escapeHTML(project.member || "Sin asignar")}</span><br><span style="display:inline-flex;align-items:center;gap:5px;color:var(--muted);margin-top:3px"><span class="color-dot" style="background:${processColor}"></span>${escapeHTML(project.process || "RNO")}</span>`;
+
+        const timeline = document.createElement("div");
+        timeline.className = "timeline";
+        timeline.style.width = totalDays * dayWidth + "px";
+
+        const startOffset = diffDays(minDate, parseDate(project.start));
+        const duration = diffDays(parseDate(project.start), parseDate(project.end)) + 1;
+
+        const bar = document.createElement("div");
+        bar.className = "bar";
+        bar.style.left = startOffset * dayWidth + "px";
+        bar.style.width = duration * dayWidth + "px";
+        bar.title = `${project.name}: ${project.start} a ${project.end} · ${project.member || "Sin asignar"} · ${project.process || "RNO"} · ${project.progress}%`;
+        bar.style.background = hexToRgba(memberColor, .28);
+        bar.style.borderColor = memberColor;
+
+        const progress = document.createElement("div");
+        progress.className = "bar-progress";
+        progress.style.width = project.progress + "%";
+        progress.style.background = processColor;
+
+        const label = document.createElement("div");
+        label.className = "bar-label";
+        label.textContent = `${project.name} · ${project.progress}%`;
+
+        bar.append(progress, label);
+        timeline.appendChild(bar);
+        row.append(name, timeline);
+        container.appendChild(row);
+      });
+
+      els.gantt.innerHTML = "";
+      els.gantt.appendChild(container);
+    }
+
+    function getMemberColor(member) {
+      return state.memberColors?.[member] || "#94a3b8";
+    }
+
+    function getProcessColor(process) {
+      return state.processColors?.[process || "RNO"] || DEFAULT_PROCESS_COLORS[process || "RNO"] || "#64748b";
+    }
+
+    function hexToRgba(hex, alpha) {
+      const clean = String(hex).replace("#", "");
+      const value = clean.length === 3 ? clean.split("").map(c => c + c).join("") : clean;
+      const number = parseInt(value, 16);
+      const r = (number >> 16) & 255;
+      const g = (number >> 8) & 255;
+      const b = number & 255;
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    function renderGanttLegend() {
+      const visible = getGanttProjects();
+      const members = [...new Set(visible.map(p => p.member).filter(Boolean))];
+      const processes = [...new Set(visible.map(p => p.process || "RNO"))];
+      els.ganttLegend.innerHTML = `<strong style="color:var(--text)">Responsables:</strong> ${members.map(member => `<span class="legend-item"><span class="color-dot" style="background:${getMemberColor(member)}"></span>${escapeHTML(member)}</span>`).join("")} <strong style="color:var(--text);margin-left:8px">Procesos:</strong> ${processes.map(process => `<span class="legend-item"><span class="color-dot" style="background:${getProcessColor(process)}"></span>${escapeHTML(process)}</span>`).join("")}`;
+    }
+
+    function statusClass(status) {
+      return {
+        "Pendiente": "status-pending",
+        "En progreso": "status-progress",
+        "Completado": "status-done",
+        "Retrasado": "status-delayed"
+      }[status] || "status-pending";
+    }
+
+    function addMember() {
+      const name = els.memberName.value.trim();
+      if (!name) return;
+      if (state.members.some(m => m.toLowerCase() === name.toLowerCase())) {
+        alert("Ese integrante ya existe.");
+        return;
+      }
+      state.members.push(name);
+      state.memberColors = state.memberColors || {};
+      state.memberColors[name] = DEFAULT_MEMBER_COLORS[(state.members.length - 1) % DEFAULT_MEMBER_COLORS.length];
+      els.memberName.value = "";
+      saveState();
+      render();
+    }
+
+    function removeMember(member) {
+      const assigned = state.projects.some(p => p.member === member);
+      const message = assigned
+        ? `El integrante "${member}" tiene proyectos asignados. Si lo eliminas, esos proyectos quedarán sin responsable. ¿Continuar?`
+        : `¿Eliminar a "${member}" del equipo?`;
+
+      if (!confirm(message)) return;
+      state.members = state.members.filter(m => m !== member);
+      if (state.memberColors) delete state.memberColors[member];
+      state.projects.forEach(p => {
+        if (p.member === member) p.member = "";
+      });
+      saveState();
+      render();
+    }
+
+    function openProjectModal(project = null) {
+      renderMemberOptions();
+      els.modalTitle.textContent = project ? "Editar proyecto" : "Nuevo proyecto";
+      els.projectId.value = project?.id || "";
+      els.projectName.value = project?.name || "";
+      els.projectMember.value = project?.member || state.members[0] || "";
+      els.projectStatus.value = project?.status || "Pendiente";
+      els.projectProcess.value = project?.process || "RNO";
+      els.projectStart.value = project?.start || todayISO();
+      els.projectEnd.value = project?.end || addDaysISO(7);
+      els.projectProgress.value = project?.progress ?? 0;
+      els.modalProgressValue.textContent = els.projectProgress.value + "%";
+      els.projectNotes.value = project?.notes || "";
+      els.projectModal.classList.add("show");
+    }
+
+    function closeProjectModal() {
+      els.projectModal.classList.remove("show");
+      els.projectForm.reset();
+    }
+
+    function saveProject(event) {
+      event.preventDefault();
+
+      if (els.projectEnd.value < els.projectStart.value) {
+        alert("La fecha de fin no puede ser anterior a la fecha de inicio.");
+        return;
+      }
+
+      const data = {
+        name: els.projectName.value.trim(),
+        member: els.projectMember.value,
+        status: els.projectStatus.value,
+        process: els.projectProcess.value,
+        start: els.projectStart.value,
+        end: els.projectEnd.value,
+        progress: Number(els.projectProgress.value),
+        notes: els.projectNotes.value.trim()
+      };
+
+      if (!data.name) return;
+
+      const id = els.projectId.value;
+      if (id) {
+        const index = state.projects.findIndex(p => p.id === id);
+        if (index >= 0) state.projects[index] = { ...state.projects[index], ...data };
+      } else {
+        state.projects.push({ id: crypto.randomUUID(), ...data });
+      }
+
+      saveState();
+      closeProjectModal();
+      render();
+    }
+
+    function deleteProject(id) {
+      const project = state.projects.find(p => p.id === id);
+      if (!project) return;
+      if (!confirm(`¿Eliminar el proyecto "${project.name}"?`)) return;
+      state.projects = state.projects.filter(p => p.id !== id);
+      saveState();
+      render();
+    }
+
+    function exportGanttPNG() {
+      const projects = getGanttProjects();
+      if (!projects.length) {
+        alert("No hay proyectos visibles para exportar. Ajusta los filtros e inténtalo de nuevo.");
+        return;
+      }
+
+      const dates = projects.flatMap(project => [parseDate(project.start), parseDate(project.end)]);
+      const minDate = new Date(Math.min(...dates));
+      const maxDate = new Date(Math.max(...dates));
+      minDate.setDate(minDate.getDate() - 2);
+      maxDate.setDate(maxDate.getDate() + 2);
+
+      const totalDays = diffDays(minDate, maxDate) + 1;
+      const dayWidth = Math.max(24, Number(els.dayWidth.value));
+      const labelWidth = 300;
+      const timelineWidth = totalDays * dayWidth;
+      const margin = 34;
+      const titleHeight = 76;
+      const legendRowHeight = 26;
+      const visibleMembers = [...new Set(projects.map(project => project.member || "Sin asignar"))];
+      const visibleProcesses = [...new Set(projects.map(project => project.process || "RNO"))];
+      const legendItems = visibleMembers.length + visibleProcesses.length;
+      const legendColumns = Math.max(1, Math.floor((labelWidth + timelineWidth) / 190));
+      const legendRows = Math.ceil(legendItems / legendColumns);
+      const legendHeight = 48 + legendRows * legendRowHeight;
+      const headerHeight = 52;
+      const rowHeight = 56;
+      const width = margin * 2 + labelWidth + timelineWidth;
+      const height = margin * 2 + titleHeight + legendHeight + headerHeight + projects.length * rowHeight;
+      const scale = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width * scale;
+      canvas.height = height * scale;
+      const ctx = canvas.getContext("2d");
+      ctx.scale(scale, scale);
+
+      ctx.fillStyle = "#f4f7fb";
+      ctx.fillRect(0, 0, width, height);
+
+      const contentX = margin;
+      const contentY = margin;
+      const chartY = contentY + titleHeight + legendHeight;
+      const timelineX = contentX + labelWidth;
+
+      ctx.fillStyle = "#ffffff";
+      roundedRect(ctx, contentX, contentY, labelWidth + timelineWidth, height - margin * 2, 16);
+      ctx.fill();
+
+      ctx.fillStyle = "#182033";
+      ctx.font = "700 28px Arial, sans-serif";
+      ctx.fillText("Diagrama de Gantt", contentX + 20, contentY + 35);
+      ctx.fillStyle = "#667085";
+      ctx.font = "14px Arial, sans-serif";
+      ctx.fillText(`Exportado el ${new Date().toLocaleDateString("es-MX")} · ${projects.length} proyecto(s)`, contentX + 20, contentY + 59);
+
+      let legendIndex = 0;
+      const legendStartY = contentY + titleHeight + 16;
+      const drawLegendItem = (label, color, prefix) => {
+        const col = legendIndex % legendColumns;
+        const row = Math.floor(legendIndex / legendColumns);
+        const x = contentX + 20 + col * 190;
+        const y = legendStartY + row * legendRowHeight;
+        ctx.fillStyle = color;
+        roundedRect(ctx, x, y - 10, 14, 14, 4);
+        ctx.fill();
+        ctx.fillStyle = "#344054";
+        ctx.font = "12px Arial, sans-serif";
+        ctx.fillText(`${prefix}: ${label}`, x + 21, y + 1);
+        legendIndex++;
+      };
+      visibleMembers.forEach(member => drawLegendItem(member, getMemberColor(member), "Responsable"));
+      visibleProcesses.forEach(process => drawLegendItem(process, getProcessColor(process), "Proceso"));
+
+      ctx.fillStyle = "#f8fafc";
+      ctx.fillRect(contentX, chartY, labelWidth + timelineWidth, headerHeight);
+      ctx.strokeStyle = "#dce3ee";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(contentX, chartY, labelWidth + timelineWidth, headerHeight);
+      ctx.beginPath();
+      ctx.moveTo(timelineX, chartY);
+      ctx.lineTo(timelineX, chartY + headerHeight + projects.length * rowHeight);
+      ctx.stroke();
+
+      ctx.fillStyle = "#475467";
+      ctx.font = "700 12px Arial, sans-serif";
+      ctx.fillText("PROYECTO / RESPONSABLE", contentX + 14, chartY + 30);
+
+      for (let day = 0; day < totalDays; day++) {
+        const date = new Date(minDate);
+        date.setDate(minDate.getDate() + day);
+        const x = timelineX + day * dayWidth;
+        ctx.strokeStyle = "#e5eaf1";
+        ctx.beginPath();
+        ctx.moveTo(x, chartY);
+        ctx.lineTo(x, chartY + headerHeight + projects.length * rowHeight);
+        ctx.stroke();
+        ctx.fillStyle = "#182033";
+        ctx.font = "700 11px Arial, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(String(date.getDate()), x + dayWidth / 2, chartY + 20);
+        ctx.fillStyle = "#667085";
+        ctx.font = "10px Arial, sans-serif";
+        ctx.fillText(date.toLocaleDateString("es-MX", { month: "short" }).replace(".", ""), x + dayWidth / 2, chartY + 37);
+      }
+      ctx.textAlign = "left";
+
+      projects.forEach((project, index) => {
+        const y = chartY + headerHeight + index * rowHeight;
+        ctx.fillStyle = index % 2 === 0 ? "#ffffff" : "#fbfcfe";
+        ctx.fillRect(contentX, y, labelWidth + timelineWidth, rowHeight);
+        ctx.strokeStyle = "#dce3ee";
+        ctx.beginPath();
+        ctx.moveTo(contentX, y + rowHeight);
+        ctx.lineTo(contentX + labelWidth + timelineWidth, y + rowHeight);
+        ctx.stroke();
+
+        ctx.fillStyle = "#182033";
+        ctx.font = "700 13px Arial, sans-serif";
+        ctx.fillText(truncateText(ctx, project.name, labelWidth - 28), contentX + 14, y + 22);
+        ctx.fillStyle = "#667085";
+        ctx.font = "12px Arial, sans-serif";
+        ctx.fillText(truncateText(ctx, `${project.member || "Sin asignar"} · ${project.process || "RNO"}`, labelWidth - 28), contentX + 14, y + 42);
+
+        const startOffset = diffDays(minDate, parseDate(project.start));
+        const duration = diffDays(parseDate(project.start), parseDate(project.end)) + 1;
+        const barX = timelineX + startOffset * dayWidth + 2;
+        const barY = y + 13;
+        const barWidth = Math.max(8, duration * dayWidth - 4);
+        const barHeight = 30;
+
+        ctx.fillStyle = getMemberColor(project.member || "Sin asignar");
+        ctx.globalAlpha = 0.35;
+        roundedRect(ctx, barX, barY, barWidth, barHeight, 7);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+
+        const progressWidth = barWidth * Math.max(0, Math.min(100, Number(project.progress) || 0)) / 100;
+        if (progressWidth > 0) {
+          ctx.fillStyle = getProcessColor(project.process || "RNO");
+          roundedRect(ctx, barX, barY, progressWidth, barHeight, 7);
+          ctx.fill();
+        }
+
+        ctx.fillStyle = "#0f172a";
+        ctx.font = "700 11px Arial, sans-serif";
+        const barText = `${project.name} · ${project.progress}%`;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(barX + 7, barY, Math.max(0, barWidth - 14), barHeight);
+        ctx.clip();
+        ctx.fillText(barText, barX + 8, barY + 20);
+        ctx.restore();
+      });
+
+      canvas.toBlob(blob => {
+        if (!blob) {
+          alert("No fue posible crear la imagen PNG.");
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `diagrama-gantt-${todayISO()}.png`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      }, "image/png");
+    }
+
+    function roundedRect(ctx, x, y, width, height, radius) {
+      const r = Math.min(radius, width / 2, height / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + width, y, x + width, y + height, r);
+      ctx.arcTo(x + width, y + height, x, y + height, r);
+      ctx.arcTo(x, y + height, x, y, r);
+      ctx.arcTo(x, y, x + width, y, r);
+      ctx.closePath();
+    }
+
+    function truncateText(ctx, text, maxWidth) {
+      const value = String(text || "");
+      if (ctx.measureText(value).width <= maxWidth) return value;
+      let shortened = value;
+      while (shortened.length > 1 && ctx.measureText(shortened + "…").width > maxWidth) {
+        shortened = shortened.slice(0, -1);
+      }
+      return shortened + "…";
+    }
+
+    function escapeHTML(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function escapeAttribute(value) {
+      return escapeHTML(value);
+    }
+
+    els.configurationTab.addEventListener("click", () => switchScreen("configurationScreen"));
+    els.ganttTab.addEventListener("click", () => switchScreen("ganttScreen"));
+
+    els.addMemberBtn.addEventListener("click", addMember);
+    els.memberName.addEventListener("keydown", e => {
+      if (e.key === "Enter") addMember();
+    });
+
+    els.addProjectBtn.addEventListener("click", () => openProjectModal());
+    els.closeModalBtn.addEventListener("click", closeProjectModal);
+    els.cancelModalBtn.addEventListener("click", closeProjectModal);
+    els.projectModal.addEventListener("click", e => {
+      if (e.target === els.projectModal) closeProjectModal();
+    });
+    els.projectForm.addEventListener("submit", saveProject);
+
+    els.projectProgress.addEventListener("input", () => {
+      els.modalProgressValue.textContent = els.projectProgress.value + "%";
+    });
+
+    [els.filterMember, els.filterStatus, els.filterProcess, els.searchProject, els.dayWidth].forEach(control => {
+      control.addEventListener(control === els.searchProject ? "input" : "change", render);
+    });
+
+    els.ganttFilterMember.addEventListener("change", () => {
+      renderSummary();
+      renderGantt();
+    });
+
+    els.exportBtn.addEventListener("click", exportGanttPNG);
+
+    const ganttScrollContainer = document.querySelector(".gantt-container");
+    ganttScrollContainer.addEventListener("wheel", event => {
+      if (!event.shiftKey) return;
+      event.preventDefault();
+      ganttScrollContainer.scrollLeft += event.deltaY || event.deltaX;
+    }, { passive: false });
+
+    render();
+    switchScreen(localStorage.getItem("gantt_active_screen") || "configurationScreen");
+    initializeFirebaseSync();
+  </script>
+</body>
+</html>
