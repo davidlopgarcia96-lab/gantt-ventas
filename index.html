@@ -732,10 +732,10 @@
           </label>
           <label style="display:flex;align-items:center;gap:8px;">
             Proyecto
-            <select id="ganttFilterProject">
-              <option value="">Todos los proyectos</option>
-            </select>
+            <input id="ganttSearchProject" placeholder="Escribe una palabra..." />
           </label>
+          <button class="btn-primary" id="ganttSearchBtn" type="button">Buscar</button>
+          <button class="btn-secondary" id="ganttClearSearchBtn" type="button">Limpiar</button>
           <label style="display:flex;align-items:center;gap:8px;">
             Vista
             <select id="ganttScale">
@@ -911,6 +911,7 @@
     let unsubscribeShared = null;
     let applyingRemoteState = false;
     let saveTimer = null;
+    let ganttProjectSearchTerm = "";
 
     const els = {
       configurationScreen: document.getElementById("configurationScreen"),
@@ -929,7 +930,9 @@
       addMemberBtn: document.getElementById("addMemberBtn"),
       filterMember: document.getElementById("filterMember"),
       ganttFilterMember: document.getElementById("ganttFilterMember"),
-      ganttFilterProject: document.getElementById("ganttFilterProject"),
+      ganttSearchProject: document.getElementById("ganttSearchProject"),
+      ganttSearchBtn: document.getElementById("ganttSearchBtn"),
+      ganttClearSearchBtn: document.getElementById("ganttClearSearchBtn"),
       filterStatus: document.getElementById("filterStatus"),
       filterProcess: document.getElementById("filterProcess"),
       searchProject: document.getElementById("searchProject"),
@@ -1253,10 +1256,10 @@
 
     function getGanttProjects() {
       const member = els.ganttFilterMember.value;
-      const projectId = els.ganttFilterProject.value;
+      const search = ganttProjectSearchTerm.trim().toLowerCase();
       const filtered = state.projects.filter(project => {
         const memberOk = !member || project.member === member;
-        const projectOk = !projectId || project.id === projectId;
+        const projectOk = !search || String(project.name || "").toLowerCase().includes(search);
         return memberOk && projectOk;
       });
       return sortProjectsByDate(filtered);
@@ -1277,7 +1280,6 @@
     }
 
     function render() {
-      renderGanttProjectOptions();
       renderSummary();
       renderMembers();
       renderProcessPalette();
@@ -1285,23 +1287,6 @@
       renderProcessOptions();
       renderTable();
       renderGantt();
-    }
-
-    function renderGanttProjectOptions() {
-      const currentValue = els.ganttFilterProject.value;
-      const member = els.ganttFilterMember.value;
-      const projects = sortProjectsByDate(
-        state.projects.filter(project => !member || project.member === member)
-      );
-
-      els.ganttFilterProject.innerHTML = '<option value="">Todos los proyectos</option>';
-      projects.forEach(project => {
-        els.ganttFilterProject.add(new Option(project.name || "Proyecto sin nombre", project.id));
-      });
-
-      if (projects.some(project => project.id === currentValue)) {
-        els.ganttFilterProject.value = currentValue;
-      }
     }
 
     function renderSummary() {
@@ -1480,7 +1465,10 @@
       renderGanttLegend();
       const projects = getGanttProjects();
       if (!projects.length) {
-        els.gantt.innerHTML = '<div class="empty">No hay proyectos para mostrar en el diagrama.</div>';
+        const searchText = ganttProjectSearchTerm.trim();
+        els.gantt.innerHTML = searchText
+          ? `<div class="empty">Sin resultados para “${escapeHTML(searchText)}”.</div>`
+          : '<div class="empty">No hay proyectos para mostrar en el diagrama.</div>';
         return;
       }
 
@@ -1924,12 +1912,28 @@
     });
 
     els.ganttFilterMember.addEventListener("change", () => {
-      renderGanttProjectOptions();
       renderSummary();
       renderGantt();
     });
 
-    els.ganttFilterProject.addEventListener("change", () => {
+    function runGanttProjectSearch() {
+      ganttProjectSearchTerm = els.ganttSearchProject.value.trim();
+      renderSummary();
+      renderGantt();
+    }
+
+    els.ganttSearchBtn.addEventListener("click", runGanttProjectSearch);
+
+    els.ganttSearchProject.addEventListener("keydown", event => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        runGanttProjectSearch();
+      }
+    });
+
+    els.ganttClearSearchBtn.addEventListener("click", () => {
+      els.ganttSearchProject.value = "";
+      ganttProjectSearchTerm = "";
       renderSummary();
       renderGantt();
     });
