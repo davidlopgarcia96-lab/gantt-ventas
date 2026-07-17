@@ -938,6 +938,30 @@
       gap: 8px;
       min-width: 260px;
     }
+    .gantt-project-toggle {
+      width: 22px;
+      height: 22px;
+      min-height: 22px;
+      padding: 0;
+      margin-right: 6px;
+      border: 1px solid #c8cccd;
+      border-radius: 3px;
+      background: #ffffff;
+      color: var(--graphite-dark);
+      font-size: 12px;
+      line-height: 1;
+      vertical-align: middle;
+      box-shadow: none;
+    }
+
+    .gantt-project-toggle:hover {
+      background: var(--accent-soft);
+      color: var(--primary);
+      border-color: var(--primary);
+      box-shadow: none;
+      transform: none;
+    }
+
     .project-toggle {
       width: 30px;
       min-height: 30px;
@@ -1323,6 +1347,7 @@
     let ganttProjectSearchTerm = "";
     let projectModalStages = [];
     const expandedProjects = new Set();
+    const ganttCollapsedProjects = new Set();
 
     const els = {
       configurationScreen: document.getElementById("configurationScreen"),
@@ -1994,7 +2019,10 @@
       const visibleItems = [];
       projects.forEach(project => {
         visibleItems.push({ type: "project", project, item: project });
-        (project.stages || []).forEach(stage => visibleItems.push({ type: "stage", project, item: stage }));
+        const isCollapsed = ganttCollapsedProjects.has(project.id);
+        if (!isCollapsed) {
+          (project.stages || []).forEach(stage => visibleItems.push({ type: "stage", project, item: stage }));
+        }
       });
       const dates = visibleItems.flatMap(entry => [parseDate(entry.item.start), parseDate(entry.item.end)]);
       let minDate = new Date(Math.min(...dates));
@@ -2014,9 +2042,19 @@
         const name=document.createElement("div"); name.className="gantt-name";
         const memberColor=getMemberColor(item.member || project.member); const processColor=getProcessColor(item.process || project.process);
         const progress = type === "project" ? getProjectProgress(project) : Number(item.progress)||0;
-        name.innerHTML = type === "project"
-          ? `<strong>▾ ${escapeHTML(project.name)}</strong><br><span style="color:var(--muted)">${project.stages?.length || 0} etapa(s) · ${progress}%</span>`
-          : `<strong>↳ ${escapeHTML(item.name)}</strong><br><span style="color:var(--muted);display:inline-flex;align-items:center;gap:5px"><span class="color-dot" style="background:${memberColor}"></span>${escapeHTML(item.member || "Sin asignar")}</span>`;
+        if (type === "project") {
+          const stageCount = project.stages?.length || 0;
+          const isCollapsed = ganttCollapsedProjects.has(project.id);
+          name.innerHTML = `${stageCount ? `<button type="button" class="gantt-project-toggle" title="${isCollapsed ? "Mostrar" : "Ocultar"} etapas" aria-expanded="${!isCollapsed}">${isCollapsed ? "▶" : "▼"}</button>` : ""}<strong>${escapeHTML(project.name)}</strong><br><span style="color:var(--muted);margin-left:${stageCount ? "30px" : "0"}">${stageCount} etapa(s) · ${progress}%</span>`;
+          name.querySelector(".gantt-project-toggle")?.addEventListener("click", event => {
+            event.stopPropagation();
+            if (ganttCollapsedProjects.has(project.id)) ganttCollapsedProjects.delete(project.id);
+            else ganttCollapsedProjects.add(project.id);
+            renderGantt();
+          });
+        } else {
+          name.innerHTML = `<strong>↳ ${escapeHTML(item.name)}</strong><br><span style="color:var(--muted);display:inline-flex;align-items:center;gap:5px"><span class="color-dot" style="background:${memberColor}"></span>${escapeHTML(item.member || "Sin asignar")}</span>`;
+        }
         const timeline=document.createElement("div"); timeline.className="timeline"; timeline.style.width=model.totalWidth+"px";
         const barStart=model.dateToX(parseDate(item.start)); const barEnd=model.dateToX(addDays(parseDate(item.end),1));
         const bar=document.createElement("div"); bar.className="bar"; bar.style.left=barStart+"px"; bar.style.width=Math.max(8,barEnd-barStart)+"px"; bar.style.background=hexToRgba(memberColor,type === "project" ? .22 : .28); bar.style.borderColor=type === "project" ? "var(--primary)" : memberColor;
