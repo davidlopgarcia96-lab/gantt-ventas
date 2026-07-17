@@ -731,6 +731,15 @@
             </select>
           </label>
           <label style="display:flex;align-items:center;gap:8px;">
+            Vista
+            <select id="ganttScale">
+              <option value="auto" selected>Automática</option>
+              <option value="day">Días</option>
+              <option value="week">Semanas</option>
+              <option value="month">Meses</option>
+            </select>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;">
             Escala
             <select id="dayWidth">
               <option value="20">Compacta</option>
@@ -921,6 +930,7 @@
       gantt: document.getElementById("gantt"),
       addProjectBtn: document.getElementById("addProjectBtn"),
       exportBtn: document.getElementById("exportBtn"),
+      ganttScale: document.getElementById("ganttScale"),
       dayWidth: document.getElementById("dayWidth"),
       projectModal: document.getElementById("projectModal"),
       modalTitle: document.getElementById("modalTitle"),
@@ -969,6 +979,119 @@
 
     function diffDays(start, end) {
       return Math.round((end - start) / 86400000);
+    }
+
+    function addDays(date, days) {
+      const result = new Date(date);
+      result.setDate(result.getDate() + days);
+      return result;
+    }
+
+    function startOfWeek(date) {
+      const result = new Date(date);
+      const day = result.getDay();
+      const difference = day === 0 ? -6 : 1 - day;
+      result.setDate(result.getDate() + difference);
+      result.setHours(0, 0, 0, 0);
+      return result;
+    }
+
+    function startOfMonth(date) {
+      return new Date(date.getFullYear(), date.getMonth(), 1);
+    }
+
+    function resolveGanttScale(requestedScale, totalDays) {
+      if (requestedScale !== "auto") return requestedScale;
+      if (totalDays <= 60) return "day";
+      if (totalDays <= 240) return "week";
+      return "month";
+    }
+
+    function createTimelineModel(minDate, maxDate, requestedScale, density) {
+      const originalDays = diffDays(minDate, maxDate) + 1;
+      const scale = resolveGanttScale(requestedScale, originalDays);
+      let timelineStart;
+      let timelineEndExclusive;
+      let cellWidth;
+      let stepDays;
+
+      if (scale === "week") {
+        timelineStart = startOfWeek(minDate);
+        timelineEndExclusive = addDays(startOfWeek(maxDate), 7);
+        cellWidth = Math.max(60, Math.round(density * 3));
+        stepDays = 7;
+      } else if (scale === "month") {
+        timelineStart = startOfMonth(minDate);
+        timelineEndExclusive = new Date(maxDate.getFullYear(), maxDate.getMonth() + 1, 1);
+        cellWidth = Math.max(88, Math.round(density * 4));
+      } else {
+        timelineStart = new Date(minDate);
+        timelineEndExclusive = addDays(maxDate, 1);
+        cellWidth = density;
+        stepDays = 1;
+      }
+
+      const periods = [];
+      let cursor = new Date(timelineStart);
+
+      while (cursor < timelineEndExclusive) {
+        const periodStart = new Date(cursor);
+        const periodEndExclusive = scale === "month"
+          ? new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
+          : addDays(cursor, stepDays);
+        const periodEnd = addDays(periodEndExclusive, -1);
+
+        let primary;
+        let secondary;
+
+        if (scale === "month") {
+          primary = periodStart.toLocaleDateString("es-MX", { month: "short" }).replace(".", "");
+          secondary = String(periodStart.getFullYear());
+        } else if (scale === "week") {
+          primary = `${periodStart.getDate()}–${periodEnd.getDate()}`;
+          secondary = periodStart.toLocaleDateString("es-MX", { month: "short" }).replace(".", "");
+        } else {
+          primary = String(periodStart.getDate());
+          secondary = periodStart.toLocaleDateString("es-MX", { month: "short" }).replace(".", "");
+        }
+
+        periods.push({
+          start: periodStart,
+          endExclusive: periodEndExclusive,
+          width: cellWidth,
+          primary,
+          secondary
+        });
+        cursor = periodEndExclusive;
+      }
+
+      const totalWidth = periods.reduce((sum, period) => sum + period.width, 0);
+
+      function dateToX(date) {
+        const target = new Date(date);
+        let x = 0;
+
+        for (const period of periods) {
+          if (target < period.endExclusive) {
+            const periodDuration = period.endExclusive - period.start;
+            const elapsed = Math.max(0, target - period.start);
+            return x + Math.min(1, elapsed / periodDuration) * period.width;
+          }
+          x += period.width;
+        }
+
+        return totalWidth;
+      }
+
+      return {
+        scale,
+        periods,
+        totalWidth,
+        cellWidth,
+        timelineStart,
+        timelineEndExclusive,
+        dateToX
+      };
     }
 
     function normalizeState(parsed) {
@@ -1338,12 +1461,12 @@
       minDate.setDate(minDate.getDate() - 2);
       maxDate.setDate(maxDate.getDate() + 2);
 
-      const totalDays = diffDays(minDate, maxDate) + 1;
-      const dayWidth = Number(els.dayWidth.value);
+      const density = Number(els.dayWidth.value);
+      const model = createTimelineModel(minDate, maxDate, els.ganttScale.value, density);
 
       const container = document.createElement("div");
       container.className = "gantt";
-      container.style.setProperty("--day-width", dayWidth + "px");
+      container.style.setProperty("--day-width", model.cellWidth + "px");
 
       const header = document.createElement("div");
       header.className = "gantt-header";
@@ -1354,17 +1477,16 @@
 
       const timelineHeader = document.createElement("div");
       timelineHeader.className = "timeline timeline-header";
-      timelineHeader.style.gridTemplateColumns = `repeat(${totalDays}, ${dayWidth}px)`;
-      timelineHeader.style.width = totalDays * dayWidth + "px";
+      timelineHeader.style.gridTemplateColumns = model.periods.map(period => `${period.width}px`).join(" ");
+      timelineHeader.style.width = model.totalWidth + "px";
 
-      for (let i = 0; i < totalDays; i++) {
-        const date = new Date(minDate);
-        date.setDate(minDate.getDate() + i);
+      model.periods.forEach(period => {
         const cell = document.createElement("div");
         cell.className = "day-cell";
-        cell.innerHTML = `<strong>${date.getDate()}</strong>${date.toLocaleDateString("es-MX", { month: "short" })}`;
+        cell.style.minWidth = period.width + "px";
+        cell.innerHTML = `<strong>${escapeHTML(period.primary)}</strong>${escapeHTML(period.secondary)}`;
         timelineHeader.appendChild(cell);
-      }
+      });
 
       header.append(nameHeader, timelineHeader);
       container.appendChild(header);
@@ -1381,15 +1503,15 @@
 
         const timeline = document.createElement("div");
         timeline.className = "timeline";
-        timeline.style.width = totalDays * dayWidth + "px";
+        timeline.style.width = model.totalWidth + "px";
 
-        const startOffset = diffDays(minDate, parseDate(project.start));
-        const duration = diffDays(parseDate(project.start), parseDate(project.end)) + 1;
+        const barStart = model.dateToX(parseDate(project.start));
+        const barEnd = model.dateToX(addDays(parseDate(project.end), 1));
 
         const bar = document.createElement("div");
         bar.className = "bar";
-        bar.style.left = startOffset * dayWidth + "px";
-        bar.style.width = duration * dayWidth + "px";
+        bar.style.left = barStart + "px";
+        bar.style.width = Math.max(8, barEnd - barStart) + "px";
         bar.title = `${project.name}: ${project.start} a ${project.end} · ${project.member || "Sin asignar"} · ${project.process || "RNO"} · ${project.progress}%`;
         bar.style.background = hexToRgba(memberColor, .28);
         bar.style.borderColor = memberColor;
@@ -1555,10 +1677,10 @@
       minDate.setDate(minDate.getDate() - 2);
       maxDate.setDate(maxDate.getDate() + 2);
 
-      const totalDays = diffDays(minDate, maxDate) + 1;
-      const dayWidth = Math.max(24, Number(els.dayWidth.value));
+      const density = Math.max(20, Number(els.dayWidth.value));
+      const model = createTimelineModel(minDate, maxDate, els.ganttScale.value, density);
       const labelWidth = 300;
-      const timelineWidth = totalDays * dayWidth;
+      const timelineWidth = model.totalWidth;
       const margin = 34;
       const titleHeight = 76;
       const legendRowHeight = 26;
@@ -1631,23 +1753,22 @@
       ctx.font = "700 12px Arial, sans-serif";
       ctx.fillText("PROYECTO / RESPONSABLE", contentX + 14, chartY + 30);
 
-      for (let day = 0; day < totalDays; day++) {
-        const date = new Date(minDate);
-        date.setDate(minDate.getDate() + day);
-        const x = timelineX + day * dayWidth;
+      let periodX = timelineX;
+      model.periods.forEach(period => {
         ctx.strokeStyle = "#e5eaf1";
         ctx.beginPath();
-        ctx.moveTo(x, chartY);
-        ctx.lineTo(x, chartY + headerHeight + projects.length * rowHeight);
+        ctx.moveTo(periodX, chartY);
+        ctx.lineTo(periodX, chartY + headerHeight + projects.length * rowHeight);
         ctx.stroke();
         ctx.fillStyle = "#182033";
         ctx.font = "700 11px Arial, sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText(String(date.getDate()), x + dayWidth / 2, chartY + 20);
+        ctx.fillText(period.primary, periodX + period.width / 2, chartY + 20);
         ctx.fillStyle = "#667085";
         ctx.font = "10px Arial, sans-serif";
-        ctx.fillText(date.toLocaleDateString("es-MX", { month: "short" }).replace(".", ""), x + dayWidth / 2, chartY + 37);
-      }
+        ctx.fillText(period.secondary, periodX + period.width / 2, chartY + 37);
+        periodX += period.width;
+      });
       ctx.textAlign = "left";
 
       projects.forEach((project, index) => {
@@ -1667,11 +1788,11 @@
         ctx.font = "12px Arial, sans-serif";
         ctx.fillText(truncateText(ctx, `${project.member || "Sin asignar"} · ${project.process || "RNO"}`, labelWidth - 28), contentX + 14, y + 42);
 
-        const startOffset = diffDays(minDate, parseDate(project.start));
-        const duration = diffDays(parseDate(project.start), parseDate(project.end)) + 1;
-        const barX = timelineX + startOffset * dayWidth + 2;
+        const barStart = model.dateToX(parseDate(project.start));
+        const barEnd = model.dateToX(addDays(parseDate(project.end), 1));
+        const barX = timelineX + barStart + 2;
         const barY = y + 13;
-        const barWidth = Math.max(8, duration * dayWidth - 4);
+        const barWidth = Math.max(8, barEnd - barStart - 4);
         const barHeight = 30;
 
         ctx.fillStyle = getMemberColor(project.member || "Sin asignar");
@@ -1768,7 +1889,7 @@
       els.modalProgressValue.textContent = els.projectProgress.value + "%";
     });
 
-    [els.filterMember, els.filterStatus, els.filterProcess, els.searchProject, els.dayWidth].forEach(control => {
+    [els.filterMember, els.filterStatus, els.filterProcess, els.searchProject, els.ganttScale, els.dayWidth].forEach(control => {
       control.addEventListener(control === els.searchProject ? "input" : "change", render);
     });
 
