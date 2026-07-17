@@ -323,20 +323,43 @@
     }
 
     .gantt-container {
+      width: 100%;
+      max-width: 100%;
       overflow-x: auto;
-      padding-bottom: 12px;
+      overflow-y: visible;
+      padding-bottom: 18px;
+      scrollbar-gutter: stable;
+      overscroll-behavior-x: contain;
+    }
+
+    .gantt-container::-webkit-scrollbar {
+      height: 14px;
+    }
+
+    .gantt-container::-webkit-scrollbar-track {
+      background: #e9eef6;
+      border-radius: 999px;
+    }
+
+    .gantt-container::-webkit-scrollbar-thumb {
+      background: #94a3b8;
+      border: 3px solid #e9eef6;
+      border-radius: 999px;
     }
 
     .gantt {
-      min-width: 1050px;
+      width: max-content;
+      min-width: 100%;
       border: 1px solid var(--border);
       border-radius: 12px;
-      overflow: hidden;
+      overflow: visible;
     }
 
     .gantt-header, .gantt-row {
       display: grid;
-      grid-template-columns: 260px 1fr;
+      grid-template-columns: 260px max-content;
+      width: max-content;
+      min-width: 100%;
     }
 
     .gantt-name {
@@ -361,7 +384,7 @@
       min-height: 48px;
       border-bottom: 1px solid var(--border);
       background-image: linear-gradient(to right, rgba(148, 163, 184, .25) 1px, transparent 1px);
-      background-size: var(--unit-width, 28px) 100%;
+      background-size: var(--day-width, 24px) 100%;
     }
 
     .timeline-header {
@@ -709,11 +732,10 @@
           </label>
           <label style="display:flex;align-items:center;gap:8px;">
             Escala
-            <select id="ganttScale">
-              <option value="auto" selected>Automática</option>
-              <option value="day">Días</option>
-              <option value="week">Semanas</option>
-              <option value="month">Meses</option>
+            <select id="dayWidth">
+              <option value="20">Compacta</option>
+              <option value="28" selected>Normal</option>
+              <option value="38">Amplia</option>
             </select>
           </label>
           <button class="btn-secondary" id="exportBtn">Exportar Gantt a PNG</button>
@@ -899,7 +921,7 @@
       gantt: document.getElementById("gantt"),
       addProjectBtn: document.getElementById("addProjectBtn"),
       exportBtn: document.getElementById("exportBtn"),
-      ganttScale: document.getElementById("ganttScale"),
+      dayWidth: document.getElementById("dayWidth"),
       projectModal: document.getElementById("projectModal"),
       modalTitle: document.getElementById("modalTitle"),
       projectForm: document.getElementById("projectForm"),
@@ -1065,13 +1087,29 @@
       }
     }
 
+    function sortProjectsByDate(projects) {
+      return [...projects].sort((a, b) => {
+        const startDifference = parseDate(a.start) - parseDate(b.start);
+        if (startDifference !== 0) return startDifference;
+
+        const endDifference = parseDate(a.end) - parseDate(b.end);
+        if (endDifference !== 0) return endDifference;
+
+        return String(a.name || "").localeCompare(
+          String(b.name || ""),
+          "es",
+          { sensitivity: "base", numeric: true }
+        );
+      });
+    }
+
     function getFilteredProjects() {
       const member = els.filterMember.value;
       const status = els.filterStatus.value;
       const process = els.filterProcess.value;
       const search = els.searchProject.value.trim().toLowerCase();
 
-      return state.projects.filter(project => {
+      const filtered = state.projects.filter(project => {
         const memberOk = !member || project.member === member;
         const statusOk = !status || project.status === status;
         const processOk = !process || (project.process || "RNO") === process;
@@ -1079,11 +1117,14 @@
           (project.notes || "").toLowerCase().includes(search);
         return memberOk && statusOk && processOk && searchOk;
       });
+
+      return sortProjectsByDate(filtered);
     }
 
     function getGanttProjects() {
       const member = els.ganttFilterMember.value;
-      return state.projects.filter(project => !member || project.member === member);
+      const filtered = state.projects.filter(project => !member || project.member === member);
+      return sortProjectsByDate(filtered);
     }
 
     function switchScreen(screenId) {
@@ -1282,103 +1323,6 @@
       }
     }
 
-    function startOfWeek(date) {
-      const result = new Date(date);
-      const day = result.getDay() || 7;
-      result.setDate(result.getDate() - day + 1);
-      return result;
-    }
-
-    function endOfWeek(date) {
-      const result = startOfWeek(date);
-      result.setDate(result.getDate() + 6);
-      return result;
-    }
-
-    function addDays(date, days) {
-      const result = new Date(date);
-      result.setDate(result.getDate() + days);
-      return result;
-    }
-
-    function getGanttScale(projects) {
-      const dates = projects.flatMap(project => [parseDate(project.start), parseDate(project.end)]);
-      const projectMin = new Date(Math.min(...dates));
-      const projectMax = new Date(Math.max(...dates));
-      const totalProjectDays = diffDays(projectMin, projectMax) + 1;
-      let mode = els.ganttScale.value;
-
-      if (mode === "auto") {
-        mode = totalProjectDays > 150 ? "month" : totalProjectDays > 45 ? "week" : "day";
-      }
-
-      if (mode === "month") {
-        const start = new Date(projectMin.getFullYear(), projectMin.getMonth(), 1);
-        const end = new Date(projectMax.getFullYear(), projectMax.getMonth() + 1, 0);
-        const cellWidth = 120;
-        const cells = [];
-        let cursor = new Date(start);
-
-        while (cursor <= end) {
-          const cellStart = new Date(cursor);
-          const cellEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
-          cells.push({
-            start: cellStart,
-            end: cellEnd,
-            label: cellStart.toLocaleDateString("es-MX", { month: "short" }).replace(".", ""),
-            sublabel: String(cellStart.getFullYear())
-          });
-          cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
-        }
-
-        const dateToX = date => {
-          const monthIndex = (date.getFullYear() - start.getFullYear()) * 12 + date.getMonth() - start.getMonth();
-          const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
-          const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-          return monthIndex * cellWidth + (diffDays(monthStart, date) / daysInMonth) * cellWidth;
-        };
-
-        return { mode, start, end, cells, cellWidth, width: cells.length * cellWidth, dateToX };
-      }
-
-      if (mode === "week") {
-        const paddedStart = addDays(projectMin, -2);
-        const paddedEnd = addDays(projectMax, 2);
-        const start = startOfWeek(paddedStart);
-        const end = endOfWeek(paddedEnd);
-        const cellWidth = 98;
-        const totalWeeks = Math.ceil((diffDays(start, end) + 1) / 7);
-        const cells = Array.from({ length: totalWeeks }, (_, index) => {
-          const cellStart = addDays(start, index * 7);
-          const cellEnd = addDays(cellStart, 6);
-          return {
-            start: cellStart,
-            end: cellEnd,
-            label: `${cellStart.getDate()}–${cellEnd.getDate()}`,
-            sublabel: cellStart.toLocaleDateString("es-MX", { month: "short" }).replace(".", "")
-          };
-        });
-        const dateToX = date => diffDays(start, date) * (cellWidth / 7);
-        return { mode, start, end, cells, cellWidth, width: cells.length * cellWidth, dateToX };
-      }
-
-      const start = addDays(projectMin, -2);
-      const end = addDays(projectMax, 2);
-      const cellWidth = 28;
-      const totalDays = diffDays(start, end) + 1;
-      const cells = Array.from({ length: totalDays }, (_, index) => {
-        const date = addDays(start, index);
-        return {
-          start: date,
-          end: date,
-          label: String(date.getDate()),
-          sublabel: date.toLocaleDateString("es-MX", { month: "short" }).replace(".", "")
-        };
-      });
-      const dateToX = date => diffDays(start, date) * cellWidth;
-      return { mode, start, end, cells, cellWidth, width: cells.length * cellWidth, dateToX };
-    }
-
     function renderGantt() {
       renderGanttLegend();
       const projects = getGanttProjects();
@@ -1387,10 +1331,19 @@
         return;
       }
 
-      const scale = getGanttScale(projects);
+      const dates = projects.flatMap(p => [parseDate(p.start), parseDate(p.end)]);
+      let minDate = new Date(Math.min(...dates));
+      let maxDate = new Date(Math.max(...dates));
+
+      minDate.setDate(minDate.getDate() - 2);
+      maxDate.setDate(maxDate.getDate() + 2);
+
+      const totalDays = diffDays(minDate, maxDate) + 1;
+      const dayWidth = Number(els.dayWidth.value);
+
       const container = document.createElement("div");
       container.className = "gantt";
-      container.style.setProperty("--unit-width", scale.cellWidth + "px");
+      container.style.setProperty("--day-width", dayWidth + "px");
 
       const header = document.createElement("div");
       header.className = "gantt-header";
@@ -1401,15 +1354,17 @@
 
       const timelineHeader = document.createElement("div");
       timelineHeader.className = "timeline timeline-header";
-      timelineHeader.style.gridTemplateColumns = `repeat(${scale.cells.length}, ${scale.cellWidth}px)`;
-      timelineHeader.style.width = scale.width + "px";
+      timelineHeader.style.gridTemplateColumns = `repeat(${totalDays}, ${dayWidth}px)`;
+      timelineHeader.style.width = totalDays * dayWidth + "px";
 
-      scale.cells.forEach(period => {
+      for (let i = 0; i < totalDays; i++) {
+        const date = new Date(minDate);
+        date.setDate(minDate.getDate() + i);
         const cell = document.createElement("div");
         cell.className = "day-cell";
-        cell.innerHTML = `<strong>${period.label}</strong>${period.sublabel}`;
+        cell.innerHTML = `<strong>${date.getDate()}</strong>${date.toLocaleDateString("es-MX", { month: "short" })}`;
         timelineHeader.appendChild(cell);
-      });
+      }
 
       header.append(nameHeader, timelineHeader);
       container.appendChild(header);
@@ -1426,15 +1381,15 @@
 
         const timeline = document.createElement("div");
         timeline.className = "timeline";
-        timeline.style.width = scale.width + "px";
+        timeline.style.width = totalDays * dayWidth + "px";
 
-        const barStart = scale.dateToX(parseDate(project.start));
-        const barEnd = scale.dateToX(addDays(parseDate(project.end), 1));
+        const startOffset = diffDays(minDate, parseDate(project.start));
+        const duration = diffDays(parseDate(project.start), parseDate(project.end)) + 1;
 
         const bar = document.createElement("div");
         bar.className = "bar";
-        bar.style.left = barStart + "px";
-        bar.style.width = Math.max(8, barEnd - barStart) + "px";
+        bar.style.left = startOffset * dayWidth + "px";
+        bar.style.width = duration * dayWidth + "px";
         bar.title = `${project.name}: ${project.start} a ${project.end} · ${project.member || "Sin asignar"} · ${project.process || "RNO"} · ${project.progress}%`;
         bar.style.background = hexToRgba(memberColor, .28);
         bar.style.borderColor = memberColor;
@@ -1594,9 +1549,16 @@
         return;
       }
 
-      const ganttScale = getGanttScale(projects);
+      const dates = projects.flatMap(project => [parseDate(project.start), parseDate(project.end)]);
+      const minDate = new Date(Math.min(...dates));
+      const maxDate = new Date(Math.max(...dates));
+      minDate.setDate(minDate.getDate() - 2);
+      maxDate.setDate(maxDate.getDate() + 2);
+
+      const totalDays = diffDays(minDate, maxDate) + 1;
+      const dayWidth = Math.max(24, Number(els.dayWidth.value));
       const labelWidth = 300;
-      const timelineWidth = ganttScale.width;
+      const timelineWidth = totalDays * dayWidth;
       const margin = 34;
       const titleHeight = 76;
       const legendRowHeight = 26;
@@ -1669,8 +1631,10 @@
       ctx.font = "700 12px Arial, sans-serif";
       ctx.fillText("PROYECTO / RESPONSABLE", contentX + 14, chartY + 30);
 
-      ganttScale.cells.forEach((period, index) => {
-        const x = timelineX + index * ganttScale.cellWidth;
+      for (let day = 0; day < totalDays; day++) {
+        const date = new Date(minDate);
+        date.setDate(minDate.getDate() + day);
+        const x = timelineX + day * dayWidth;
         ctx.strokeStyle = "#e5eaf1";
         ctx.beginPath();
         ctx.moveTo(x, chartY);
@@ -1679,11 +1643,11 @@
         ctx.fillStyle = "#182033";
         ctx.font = "700 11px Arial, sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText(period.label, x + ganttScale.cellWidth / 2, chartY + 20);
+        ctx.fillText(String(date.getDate()), x + dayWidth / 2, chartY + 20);
         ctx.fillStyle = "#667085";
         ctx.font = "10px Arial, sans-serif";
-        ctx.fillText(period.sublabel, x + ganttScale.cellWidth / 2, chartY + 37);
-      });
+        ctx.fillText(date.toLocaleDateString("es-MX", { month: "short" }).replace(".", ""), x + dayWidth / 2, chartY + 37);
+      }
       ctx.textAlign = "left";
 
       projects.forEach((project, index) => {
@@ -1703,11 +1667,11 @@
         ctx.font = "12px Arial, sans-serif";
         ctx.fillText(truncateText(ctx, `${project.member || "Sin asignar"} · ${project.process || "RNO"}`, labelWidth - 28), contentX + 14, y + 42);
 
-        const barStart = ganttScale.dateToX(parseDate(project.start));
-        const barEnd = ganttScale.dateToX(addDays(parseDate(project.end), 1));
-        const barX = timelineX + barStart + 2;
+        const startOffset = diffDays(minDate, parseDate(project.start));
+        const duration = diffDays(parseDate(project.start), parseDate(project.end)) + 1;
+        const barX = timelineX + startOffset * dayWidth + 2;
         const barY = y + 13;
-        const barWidth = Math.max(8, barEnd - barStart - 4);
+        const barWidth = Math.max(8, duration * dayWidth - 4);
         const barHeight = 30;
 
         ctx.fillStyle = getMemberColor(project.member || "Sin asignar");
@@ -1804,7 +1768,7 @@
       els.modalProgressValue.textContent = els.projectProgress.value + "%";
     });
 
-    [els.filterMember, els.filterStatus, els.filterProcess, els.searchProject, els.ganttScale].forEach(control => {
+    [els.filterMember, els.filterStatus, els.filterProcess, els.searchProject, els.dayWidth].forEach(control => {
       control.addEventListener(control === els.searchProject ? "input" : "change", render);
     });
 
@@ -1814,6 +1778,13 @@
     });
 
     els.exportBtn.addEventListener("click", exportGanttPNG);
+
+    const ganttScrollContainer = document.querySelector(".gantt-container");
+    ganttScrollContainer.addEventListener("wheel", event => {
+      if (!event.shiftKey) return;
+      event.preventDefault();
+      ganttScrollContainer.scrollLeft += event.deltaY || event.deltaX;
+    }, { passive: false });
 
     render();
     switchScreen(localStorage.getItem("gantt_active_screen") || "configurationScreen");
