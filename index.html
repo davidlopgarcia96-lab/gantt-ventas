@@ -731,6 +731,11 @@
             </select>
           </label>
           <label style="display:flex;align-items:center;gap:8px;">
+            Proyecto
+            <input id="ganttFilterProject" list="ganttProjectOptions" placeholder="Todos los proyectos" autocomplete="off" />
+            <datalist id="ganttProjectOptions"></datalist>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;">
             Vista
             <select id="ganttScale">
               <option value="auto" selected>Automática</option>
@@ -923,6 +928,8 @@
       addMemberBtn: document.getElementById("addMemberBtn"),
       filterMember: document.getElementById("filterMember"),
       ganttFilterMember: document.getElementById("ganttFilterMember"),
+      ganttFilterProject: document.getElementById("ganttFilterProject"),
+      ganttProjectOptions: document.getElementById("ganttProjectOptions"),
       filterStatus: document.getElementById("filterStatus"),
       filterProcess: document.getElementById("filterProcess"),
       searchProject: document.getElementById("searchProject"),
@@ -1246,7 +1253,12 @@
 
     function getGanttProjects() {
       const member = els.ganttFilterMember.value;
-      const filtered = state.projects.filter(project => !member || project.member === member);
+      const projectSearch = els.ganttFilterProject.value.trim().toLowerCase();
+      const filtered = state.projects.filter(project => {
+        const memberOk = !member || project.member === member;
+        const projectOk = !projectSearch || String(project.name || "").toLowerCase().includes(projectSearch);
+        return memberOk && projectOk;
+      });
       return sortProjectsByDate(filtered);
     }
 
@@ -1265,6 +1277,7 @@
     }
 
     function render() {
+      renderGanttProjectOptions();
       renderSummary();
       renderMembers();
       renderProcessPalette();
@@ -1272,6 +1285,22 @@
       renderProcessOptions();
       renderTable();
       renderGantt();
+    }
+
+    function renderGanttProjectOptions() {
+      const currentValue = els.ganttFilterProject.value;
+      const member = els.ganttFilterMember.value;
+      const projectNames = [...new Set(
+        state.projects
+          .filter(project => !member || project.member === member)
+          .map(project => String(project.name || "").trim())
+          .filter(Boolean)
+      )].sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base", numeric: true }));
+
+      els.ganttProjectOptions.innerHTML = projectNames
+        .map(name => `<option value="${escapeAttribute(name)}"></option>`)
+        .join("");
+      els.ganttFilterProject.value = currentValue;
     }
 
     function renderSummary() {
@@ -1894,6 +1923,12 @@
     });
 
     els.ganttFilterMember.addEventListener("change", () => {
+      renderGanttProjectOptions();
+      renderSummary();
+      renderGantt();
+    });
+
+    els.ganttFilterProject.addEventListener("input", () => {
       renderSummary();
       renderGantt();
     });
