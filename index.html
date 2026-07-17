@@ -927,6 +927,84 @@
       .filters input, .filters select, .filters button { width: 100%; }
     }
 
+    /* Proyectos con etapas */
+    .project-row-parent td {
+      background: #f7f8f8;
+      border-top: 2px solid #cfd3d4;
+    }
+    .project-title-cell {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 260px;
+    }
+    .project-toggle {
+      width: 30px;
+      min-height: 30px;
+      padding: 0;
+      background: transparent;
+      color: var(--graphite-dark);
+      border: 1px solid #cfd3d4;
+    }
+    .stage-row td { background: #fcfcfc; }
+    .stage-name-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-left: 34px;
+    }
+    .stage-connector {
+      width: 13px;
+      height: 13px;
+      border-left: 2px solid #b7bcbe;
+      border-bottom: 2px solid #b7bcbe;
+      flex: 0 0 auto;
+      margin-top: -7px;
+    }
+    .stage-actions { display:flex; gap:6px; flex-wrap:wrap; }
+    .btn-stage {
+      background: #fbecef;
+      color: var(--primary-dark);
+      border: 1px solid #e9bdc6;
+    }
+    .stages-editor {
+      grid-column: 1 / -1;
+      border: 1px solid var(--border);
+      background: #f7f8f8;
+      padding: 14px;
+    }
+    .stages-editor-header {
+      display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;
+    }
+    .stages-editor-header h3 { margin:0; font-size:15px; }
+    .stage-editor-list { display:grid; gap:10px; }
+    .stage-editor-row {
+      display:grid;
+      grid-template-columns: minmax(180px, 1.4fr) minmax(140px, 1fr) 135px 135px 145px 120px auto;
+      gap:8px;
+      align-items:end;
+      padding:10px;
+      background:#fff;
+      border:1px solid var(--border);
+    }
+    .stage-editor-row .field { min-width:0; }
+    .stage-editor-row input, .stage-editor-row select { width:100%; min-width:0; }
+    .project-parent-name { font-weight:800; }
+    .project-progress-note { font-size:11px; color:var(--muted); margin-top:4px; }
+    .gantt-row.project-parent .gantt-name {
+      background:#f1f2f2;
+      border-left:4px solid var(--primary);
+    }
+    .gantt-row.project-parent .timeline { background-color:#f7f8f8; }
+    .gantt-row.stage-child .gantt-name { padding-left:38px; background:#fcfcfc; }
+    .gantt-row.stage-child .timeline { background-color:#fcfcfc; }
+    .gantt-row.stage-child .bar { top:11px; height:26px; }
+    .gantt-row.project-parent .bar { top:7px; height:34px; border-width:2px; }
+    @media (max-width: 1100px) {
+      .stage-editor-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .stage-editor-row .stage-remove-wrap { grid-column:1 / -1; }
+    }
+
   </style>
 </head>
 <body>
@@ -1131,6 +1209,16 @@
             <label for="projectNotes">Notas</label>
             <textarea id="projectNotes" placeholder="Observaciones, pendientes, entregables..."></textarea>
           </div>
+          <div class="stages-editor">
+            <div class="stages-editor-header">
+              <div>
+                <h3>Etapas del proyecto</h3>
+                <div class="hint">Opcional. Cada etapa aparecerá debajo del proyecto en el Gantt.</div>
+              </div>
+              <button type="button" class="btn-stage" id="addStageBtn">+ Agregar etapa</button>
+            </div>
+            <div class="stage-editor-list" id="stageEditorList"></div>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn-secondary" id="cancelModalBtn">Cancelar</button>
@@ -1233,6 +1321,8 @@
     let applyingRemoteState = false;
     let saveTimer = null;
     let ganttProjectSearchTerm = "";
+    let projectModalStages = [];
+    const expandedProjects = new Set();
 
     const els = {
       configurationScreen: document.getElementById("configurationScreen"),
@@ -1276,6 +1366,8 @@
       projectProgress: document.getElementById("projectProgress"),
       modalProgressValue: document.getElementById("modalProgressValue"),
       projectNotes: document.getElementById("projectNotes"),
+      addStageBtn: document.getElementById("addStageBtn"),
+      stageEditorList: document.getElementById("stageEditorList"),
       closeModalBtn: document.getElementById("closeModalBtn"),
       cancelModalBtn: document.getElementById("cancelModalBtn"),
       cloudDot: document.getElementById("cloudDot"),
@@ -1440,7 +1532,24 @@
         memberColors,
         processColors: { ...DEFAULT_PROCESS_COLORS, ...(source?.processColors || {}) },
         projects: Array.isArray(source?.projects)
-          ? source.projects.map(project => ({ process: "RNO", ...project }))
+          ? source.projects.map(project => ({
+              process: "RNO",
+              ...project,
+              stages: Array.isArray(project.stages)
+                ? project.stages.map(stage => ({
+                    id: stage.id || crypto.randomUUID(),
+                    name: "Etapa",
+                    member: project.member || "",
+                    start: project.start,
+                    end: project.end,
+                    status: "Pendiente",
+                    process: project.process || "RNO",
+                    progress: 0,
+                    notes: "",
+                    ...stage
+                  }))
+                : []
+            }))
           : []
       };
     }
@@ -1557,6 +1666,39 @@
       });
     }
 
+    function getProjectProgress(project) {
+      const stages = Array.isArray(project.stages) ? project.stages : [];
+      if (!stages.length) return Number(project.progress) || 0;
+      return Math.round(stages.reduce((sum, stage) => sum + (Number(stage.progress) || 0), 0) / stages.length);
+    }
+
+    function getProjectDates(project) {
+      const stages = Array.isArray(project.stages) ? project.stages : [];
+      if (!stages.length) return { start: project.start, end: project.end };
+      return {
+        start: stages.reduce((min, stage) => !min || stage.start < min ? stage.start : min, ""),
+        end: stages.reduce((max, stage) => !max || stage.end > max ? stage.end : max, "")
+      };
+    }
+
+    function getProjectStatus(project) {
+      const stages = Array.isArray(project.stages) ? project.stages : [];
+      if (!stages.length) return project.status;
+      if (stages.some(stage => stage.status === "Retrasado")) return "Retrasado";
+      if (stages.every(stage => stage.status === "Completado")) return "Completado";
+      if (stages.some(stage => stage.status === "En progreso" || Number(stage.progress) > 0)) return "En progreso";
+      return "Pendiente";
+    }
+
+    function syncProjectFromStages(project) {
+      if (!Array.isArray(project.stages) || !project.stages.length) return;
+      const dates = getProjectDates(project);
+      project.start = dates.start;
+      project.end = dates.end;
+      project.progress = getProjectProgress(project);
+      project.status = getProjectStatus(project);
+    }
+
     function getFilteredProjects() {
       const member = els.filterMember.value;
       const status = els.filterStatus.value;
@@ -1613,9 +1755,9 @@
     function renderSummary() {
       const projects = getGanttProjects();
       els.totalProjects.textContent = projects.length;
-      els.inProgressProjects.textContent = projects.filter(p => p.status === "En progreso").length;
-      els.completedProjects.textContent = projects.filter(p => p.status === "Completado").length;
-      els.delayedProjects.textContent = projects.filter(p => p.status === "Retrasado").length;
+      els.inProgressProjects.textContent = projects.filter(p => getProjectStatus(p) === "En progreso").length;
+      els.completedProjects.textContent = projects.filter(p => getProjectStatus(p) === "Completado").length;
+      els.delayedProjects.textContent = projects.filter(p => getProjectStatus(p) === "Retrasado").length;
     }
 
     function renderMembers() {
@@ -1703,37 +1845,41 @@
       }
 
       projects.forEach(project => {
+        syncProjectFromStages(project);
+        const stages = Array.isArray(project.stages) ? project.stages : [];
+        const isExpanded = expandedProjects.has(project.id);
+        const projectStatus = getProjectStatus(project);
+        const projectProgress = getProjectProgress(project);
         const row = document.createElement("tr");
+        row.className = "project-row-parent";
         row.innerHTML = `
-          <td><input class="project-name" value="${escapeAttribute(project.name)}" data-field="name"></td>
-          <td><select data-field="member">${memberOptionsHTML(project.member)}</select></td>
-          <td><input type="date" value="${project.start}" data-field="start"></td>
-          <td><input type="date" value="${project.end}" data-field="end"></td>
           <td>
-            <select data-field="status">
-              ${["Pendiente","En progreso","Completado","Retrasado"].map(s => `<option ${s === project.status ? "selected" : ""}>${s}</option>`).join("")}
+            <div class="project-title-cell">
+              ${stages.length ? `<button class="project-toggle" title="Mostrar u ocultar etapas">${isExpanded ? "−" : "+"}</button>` : '<span style="width:30px"></span>'}
+              <input class="project-name project-parent-name" value="${escapeAttribute(project.name)}" data-field="name">
+            </div>
+            <div class="project-progress-note">${stages.length ? `${stages.length} etapa(s) · avance calculado` : "Proyecto sin etapas"}</div>
+          </td>
+          <td><select data-field="member">${memberOptionsHTML(project.member)}</select></td>
+          <td><input type="date" value="${project.start}" data-field="start" ${stages.length ? "disabled" : ""}></td>
+          <td><input type="date" value="${project.end}" data-field="end" ${stages.length ? "disabled" : ""}></td>
+          <td>
+            <select data-field="status" ${stages.length ? "disabled" : ""}>
+              ${["Pendiente","En progreso","Completado","Retrasado"].map(status => `<option ${status === projectStatus ? "selected" : ""}>${status}</option>`).join("")}
             </select>
-            <div style="margin-top:6px"><span class="status-badge ${statusClass(project.status)}">${project.status}</span></div>
+            <div style="margin-top:6px"><span class="status-badge ${statusClass(projectStatus)}">${projectStatus}</span></div>
           </td>
           <td>
-            <select data-field="process">
-              ${PROCESS_OPTIONS.map(process => `<option ${process === (project.process || "RNO") ? "selected" : ""}>${process}</option>`).join("")}
-            </select>
-            <div style="margin-top:6px"><span class="status-badge" style="background:${hexToRgba(getProcessColor(project.process), .16)};color:${getProcessColor(project.process)};border:1px solid ${hexToRgba(getProcessColor(project.process), .35)}">${escapeHTML(project.process || "RNO")}</span></div>
+            <select data-field="process">${PROCESS_OPTIONS.map(process => `<option ${process === (project.process || "RNO") ? "selected" : ""}>${process}</option>`).join("")}</select>
           </td>
           <td class="progress-wrap">
             <div class="progress-row">
-              <input type="range" min="0" max="100" value="${project.progress}" data-field="progress">
-              <span class="progress-label">${project.progress}%</span>
+              <input type="range" min="0" max="100" value="${projectProgress}" data-field="progress" ${stages.length ? "disabled" : ""}>
+              <span class="progress-label">${projectProgress}%</span>
             </div>
           </td>
           <td><input class="notes" value="${escapeAttribute(project.notes || "")}" data-field="notes"></td>
-          <td>
-            <div style="display:flex;gap:6px;">
-              <button class="btn-secondary edit-btn">Editar</button>
-              <button class="btn-danger delete-btn">Eliminar</button>
-            </div>
-          </td>
+          <td><div class="stage-actions"><button class="btn-stage add-stage-row-btn">+ Etapa</button><button class="btn-secondary edit-btn">Editar</button><button class="btn-danger delete-btn">Eliminar</button></div></td>
         `;
 
         row.querySelectorAll("[data-field]").forEach(control => {
@@ -1745,12 +1891,65 @@
             });
           }
         });
-
+        row.querySelector(".project-toggle")?.addEventListener("click", () => {
+          if (expandedProjects.has(project.id)) expandedProjects.delete(project.id);
+          else expandedProjects.add(project.id);
+          renderTable();
+        });
+        row.querySelector(".add-stage-row-btn").addEventListener("click", () => openProjectModal(project, true));
         row.querySelector(".edit-btn").addEventListener("click", () => openProjectModal(project));
         row.querySelector(".delete-btn").addEventListener("click", () => deleteProject(project.id));
-
         els.projectsTableBody.appendChild(row);
+
+        if (isExpanded) {
+          stages.forEach(stage => {
+            const stageRow = document.createElement("tr");
+            stageRow.className = "stage-row";
+            stageRow.innerHTML = `
+              <td><div class="stage-name-wrap"><span class="stage-connector"></span><input class="project-name" value="${escapeAttribute(stage.name)}" data-stage-field="name"></div></td>
+              <td><select data-stage-field="member">${memberOptionsHTML(stage.member)}</select></td>
+              <td><input type="date" value="${stage.start}" data-stage-field="start"></td>
+              <td><input type="date" value="${stage.end}" data-stage-field="end"></td>
+              <td><select data-stage-field="status">${["Pendiente","En progreso","Completado","Retrasado"].map(status => `<option ${status === stage.status ? "selected" : ""}>${status}</option>`).join("")}</select></td>
+              <td><select data-stage-field="process">${PROCESS_OPTIONS.map(process => `<option ${process === (stage.process || "RNO") ? "selected" : ""}>${process}</option>`).join("")}</select></td>
+              <td class="progress-wrap"><div class="progress-row"><input type="range" min="0" max="100" value="${Number(stage.progress)||0}" data-stage-field="progress"><span class="progress-label">${Number(stage.progress)||0}%</span></div></td>
+              <td><input class="notes" value="${escapeAttribute(stage.notes || "")}" data-stage-field="notes"></td>
+              <td><button class="btn-danger delete-stage-btn">Eliminar etapa</button></td>
+            `;
+            stageRow.querySelectorAll("[data-stage-field]").forEach(control => {
+              const update = () => inlineUpdateStage(project.id, stage.id, control);
+              control.addEventListener("change", update);
+              if (control.matches('input[type="range"]')) control.addEventListener("input", () => { control.parentElement.querySelector(".progress-label").textContent = control.value + "%"; update(); });
+            });
+            stageRow.querySelector(".delete-stage-btn").addEventListener("click", () => deleteStage(project.id, stage.id));
+            els.projectsTableBody.appendChild(stageRow);
+          });
+        }
       });
+    }
+
+    function inlineUpdateStage(projectId, stageId, control) {
+      const project = state.projects.find(item => item.id === projectId);
+      const stage = project?.stages?.find(item => item.id === stageId);
+      if (!project || !stage) return;
+      const field = control.dataset.stageField;
+      let value = control.value;
+      if (field === "progress") value = Number(value);
+      if ((field === "start" && value > stage.end) || (field === "end" && value < stage.start)) { alert("La fecha de fin no puede ser anterior a la fecha de inicio."); render(); return; }
+      stage[field] = value;
+      syncProjectFromStages(project);
+      saveState();
+      render();
+    }
+
+    function deleteStage(projectId, stageId) {
+      const project = state.projects.find(item => item.id === projectId);
+      const stage = project?.stages?.find(item => item.id === stageId);
+      if (!project || !stage || !confirm(`¿Eliminar la etapa "${stage.name}"?`)) return;
+      project.stages = project.stages.filter(item => item.id !== stageId);
+      if (project.stages.length) syncProjectFromStages(project);
+      saveState();
+      render();
     }
 
     function memberOptionsHTML(selected) {
@@ -1787,91 +1986,45 @@
       const projects = getGanttProjects();
       if (!projects.length) {
         const searchText = ganttProjectSearchTerm.trim();
-        els.gantt.innerHTML = searchText
-          ? `<div class="empty">Sin resultados para “${escapeHTML(searchText)}”.</div>`
-          : '<div class="empty">No hay proyectos para mostrar en el diagrama.</div>';
+        els.gantt.innerHTML = searchText ? `<div class="empty">Sin resultados para “${escapeHTML(searchText)}”.</div>` : '<div class="empty">No hay proyectos para mostrar en el diagrama.</div>';
         return;
       }
 
-      const dates = projects.flatMap(p => [parseDate(p.start), parseDate(p.end)]);
+      projects.forEach(syncProjectFromStages);
+      const visibleItems = [];
+      projects.forEach(project => {
+        visibleItems.push({ type: "project", project, item: project });
+        (project.stages || []).forEach(stage => visibleItems.push({ type: "stage", project, item: stage }));
+      });
+      const dates = visibleItems.flatMap(entry => [parseDate(entry.item.start), parseDate(entry.item.end)]);
       let minDate = new Date(Math.min(...dates));
       let maxDate = new Date(Math.max(...dates));
+      minDate.setDate(minDate.getDate() - 2); maxDate.setDate(maxDate.getDate() + 2);
+      const model = createTimelineModel(minDate, maxDate, els.ganttScale.value, Number(els.dayWidth.value));
+      const container = document.createElement("div"); container.className = "gantt"; container.style.setProperty("--day-width", model.cellWidth + "px");
+      const header = document.createElement("div"); header.className = "gantt-header";
+      const nameHeader = document.createElement("div"); nameHeader.className = "gantt-name"; nameHeader.textContent = "Proyecto / Etapa / Responsable";
+      const timelineHeader = document.createElement("div"); timelineHeader.className = "timeline timeline-header"; timelineHeader.style.gridTemplateColumns = model.periods.map(period => `${period.width}px`).join(" "); timelineHeader.style.width = model.totalWidth + "px";
+      model.periods.forEach(period => { const cell=document.createElement("div"); cell.className="day-cell"; cell.style.minWidth=period.width+"px"; cell.innerHTML=`<strong>${escapeHTML(period.primary)}</strong>${escapeHTML(period.secondary)}`; timelineHeader.appendChild(cell); });
+      header.append(nameHeader,timelineHeader); container.appendChild(header);
 
-      minDate.setDate(minDate.getDate() - 2);
-      maxDate.setDate(maxDate.getDate() + 2);
-
-      const density = Number(els.dayWidth.value);
-      const model = createTimelineModel(minDate, maxDate, els.ganttScale.value, density);
-
-      const container = document.createElement("div");
-      container.className = "gantt";
-      container.style.setProperty("--day-width", model.cellWidth + "px");
-
-      const header = document.createElement("div");
-      header.className = "gantt-header";
-
-      const nameHeader = document.createElement("div");
-      nameHeader.className = "gantt-name";
-      nameHeader.textContent = "Proyecto / Responsable";
-
-      const timelineHeader = document.createElement("div");
-      timelineHeader.className = "timeline timeline-header";
-      timelineHeader.style.gridTemplateColumns = model.periods.map(period => `${period.width}px`).join(" ");
-      timelineHeader.style.width = model.totalWidth + "px";
-
-      model.periods.forEach(period => {
-        const cell = document.createElement("div");
-        cell.className = "day-cell";
-        cell.style.minWidth = period.width + "px";
-        cell.innerHTML = `<strong>${escapeHTML(period.primary)}</strong>${escapeHTML(period.secondary)}`;
-        timelineHeader.appendChild(cell);
+      visibleItems.forEach(entry => {
+        const { type, project, item } = entry;
+        const row=document.createElement("div"); row.className=`gantt-row ${type === "project" ? "project-parent" : "stage-child"}`;
+        const name=document.createElement("div"); name.className="gantt-name";
+        const memberColor=getMemberColor(item.member || project.member); const processColor=getProcessColor(item.process || project.process);
+        const progress = type === "project" ? getProjectProgress(project) : Number(item.progress)||0;
+        name.innerHTML = type === "project"
+          ? `<strong>▾ ${escapeHTML(project.name)}</strong><br><span style="color:var(--muted)">${project.stages?.length || 0} etapa(s) · ${progress}%</span>`
+          : `<strong>↳ ${escapeHTML(item.name)}</strong><br><span style="color:var(--muted);display:inline-flex;align-items:center;gap:5px"><span class="color-dot" style="background:${memberColor}"></span>${escapeHTML(item.member || "Sin asignar")}</span>`;
+        const timeline=document.createElement("div"); timeline.className="timeline"; timeline.style.width=model.totalWidth+"px";
+        const barStart=model.dateToX(parseDate(item.start)); const barEnd=model.dateToX(addDays(parseDate(item.end),1));
+        const bar=document.createElement("div"); bar.className="bar"; bar.style.left=barStart+"px"; bar.style.width=Math.max(8,barEnd-barStart)+"px"; bar.style.background=hexToRgba(memberColor,type === "project" ? .22 : .28); bar.style.borderColor=type === "project" ? "var(--primary)" : memberColor;
+        const barProgress=document.createElement("div"); barProgress.className="bar-progress"; barProgress.style.width=progress+"%"; barProgress.style.background=type === "project" ? "var(--primary)" : processColor;
+        const label=document.createElement("div"); label.className="bar-label"; label.textContent=`${item.name || project.name} · ${progress}%`;
+        bar.append(barProgress,label); timeline.appendChild(bar); row.append(name,timeline); container.appendChild(row);
       });
-
-      header.append(nameHeader, timelineHeader);
-      container.appendChild(header);
-
-      projects.forEach(project => {
-        const row = document.createElement("div");
-        row.className = "gantt-row";
-
-        const name = document.createElement("div");
-        name.className = "gantt-name";
-        const memberColor = getMemberColor(project.member);
-        const processColor = getProcessColor(project.process);
-        name.innerHTML = `<strong>${escapeHTML(project.name)}</strong><br><span style="color:var(--muted);display:inline-flex;align-items:center;gap:5px"><span class="color-dot" style="background:${memberColor}"></span>${escapeHTML(project.member || "Sin asignar")}</span><br><span style="display:inline-flex;align-items:center;gap:5px;color:var(--muted);margin-top:3px"><span class="color-dot" style="background:${processColor}"></span>${escapeHTML(project.process || "RNO")}</span>`;
-
-        const timeline = document.createElement("div");
-        timeline.className = "timeline";
-        timeline.style.width = model.totalWidth + "px";
-
-        const barStart = model.dateToX(parseDate(project.start));
-        const barEnd = model.dateToX(addDays(parseDate(project.end), 1));
-
-        const bar = document.createElement("div");
-        bar.className = "bar";
-        bar.style.left = barStart + "px";
-        bar.style.width = Math.max(8, barEnd - barStart) + "px";
-        bar.title = `${project.name}: ${project.start} a ${project.end} · ${project.member || "Sin asignar"} · ${project.process || "RNO"} · ${project.progress}%`;
-        bar.style.background = hexToRgba(memberColor, .28);
-        bar.style.borderColor = memberColor;
-
-        const progress = document.createElement("div");
-        progress.className = "bar-progress";
-        progress.style.width = project.progress + "%";
-        progress.style.background = processColor;
-
-        const label = document.createElement("div");
-        label.className = "bar-label";
-        label.textContent = `${project.name} · ${project.progress}%`;
-
-        bar.append(progress, label);
-        timeline.appendChild(bar);
-        row.append(name, timeline);
-        container.appendChild(row);
-      });
-
-      els.gantt.innerHTML = "";
-      els.gantt.appendChild(container);
+      els.gantt.innerHTML=""; els.gantt.appendChild(container);
     }
 
     function getMemberColor(member) {
@@ -1939,7 +2092,42 @@
       render();
     }
 
-    function openProjectModal(project = null) {
+    function createEmptyStage(project = null) {
+      return {
+        id: crypto.randomUUID(), name: "", member: project?.member || state.members[0] || "",
+        start: project?.start || todayISO(), end: project?.end || addDaysISO(3),
+        status: "Pendiente", process: project?.process || "RNO", progress: 0, notes: ""
+      };
+    }
+
+    function renderStageEditor() {
+      els.stageEditorList.innerHTML = "";
+      if (!projectModalStages.length) {
+        els.stageEditorList.innerHTML = '<div class="empty" style="padding:14px">Este proyecto no tiene etapas. Puedes agregar una sin afectar los proyectos simples.</div>';
+        return;
+      }
+      projectModalStages.forEach((stage, index) => {
+        const row = document.createElement("div");
+        row.className = "stage-editor-row";
+        row.innerHTML = `
+          <div class="field"><label>Nombre de etapa</label><input value="${escapeAttribute(stage.name)}" data-field="name" placeholder="Ej. Desarrollo"></div>
+          <div class="field"><label>Responsable</label><select data-field="member">${memberOptionsHTML(stage.member)}</select></div>
+          <div class="field"><label>Inicio</label><input type="date" value="${stage.start}" data-field="start"></div>
+          <div class="field"><label>Fin</label><input type="date" value="${stage.end}" data-field="end"></div>
+          <div class="field"><label>Estado</label><select data-field="status">${["Pendiente","En progreso","Completado","Retrasado"].map(status => `<option ${status === stage.status ? "selected" : ""}>${status}</option>`).join("")}</select></div>
+          <div class="field"><label>Avance</label><input type="number" min="0" max="100" value="${Number(stage.progress)||0}" data-field="progress"></div>
+          <div class="stage-remove-wrap"><button type="button" class="btn-danger">Eliminar</button></div>`;
+        row.querySelectorAll("[data-field]").forEach(control => control.addEventListener("input", () => {
+          let value = control.value;
+          if (control.dataset.field === "progress") value = Math.max(0, Math.min(100, Number(value) || 0));
+          projectModalStages[index][control.dataset.field] = value;
+        }));
+        row.querySelector("button").addEventListener("click", () => { projectModalStages.splice(index, 1); renderStageEditor(); });
+        els.stageEditorList.appendChild(row);
+      });
+    }
+
+    function openProjectModal(project = null, addStageImmediately = false) {
       renderMemberOptions();
       els.modalTitle.textContent = project ? "Editar proyecto" : "Nuevo proyecto";
       els.projectId.value = project?.id || "";
@@ -1952,6 +2140,9 @@
       els.projectProgress.value = project?.progress ?? 0;
       els.modalProgressValue.textContent = els.projectProgress.value + "%";
       els.projectNotes.value = project?.notes || "";
+      projectModalStages = Array.isArray(project?.stages) ? structuredClone(project.stages) : [];
+      if (addStageImmediately) projectModalStages.push(createEmptyStage(project));
+      renderStageEditor();
       els.projectModal.classList.add("show");
     }
 
@@ -1976,8 +2167,21 @@
         start: els.projectStart.value,
         end: els.projectEnd.value,
         progress: Number(els.projectProgress.value),
-        notes: els.projectNotes.value.trim()
+        notes: els.projectNotes.value.trim(),
+        stages: projectModalStages
+          .filter(stage => String(stage.name || "").trim())
+          .map(stage => ({ ...stage, name: String(stage.name).trim(), progress: Number(stage.progress) || 0 }))
       };
+
+      for (const stage of data.stages) {
+        if (stage.end < stage.start) { alert(`La etapa "${stage.name}" tiene una fecha final anterior a la inicial.`); return; }
+      }
+      if (data.stages.length) {
+        const temporaryProject = { ...data };
+        syncProjectFromStages(temporaryProject);
+        data.start = temporaryProject.start; data.end = temporaryProject.end;
+        data.progress = temporaryProject.progress; data.status = temporaryProject.status;
+      }
 
       if (!data.name) return;
 
@@ -2010,7 +2214,13 @@
         return;
       }
 
-      const dates = projects.flatMap(project => [parseDate(project.start), parseDate(project.end)]);
+      projects.forEach(syncProjectFromStages);
+      const exportItems = [];
+      projects.forEach(project => {
+        exportItems.push({ type: "project", project, item: project });
+        (project.stages || []).forEach(stage => exportItems.push({ type: "stage", project, item: stage }));
+      });
+      const dates = exportItems.flatMap(entry => [parseDate(entry.item.start), parseDate(entry.item.end)]);
       const minDate = new Date(Math.min(...dates));
       const maxDate = new Date(Math.max(...dates));
       minDate.setDate(minDate.getDate() - 2);
@@ -2032,7 +2242,7 @@
       const headerHeight = 52;
       const rowHeight = 56;
       const width = margin * 2 + labelWidth + timelineWidth;
-      const height = margin * 2 + titleHeight + legendHeight + headerHeight + projects.length * rowHeight;
+      const height = margin * 2 + titleHeight + legendHeight + headerHeight + exportItems.length * rowHeight;
       const scale = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
 
       const canvas = document.createElement("canvas");
@@ -2085,7 +2295,7 @@
       ctx.strokeRect(contentX, chartY, labelWidth + timelineWidth, headerHeight);
       ctx.beginPath();
       ctx.moveTo(timelineX, chartY);
-      ctx.lineTo(timelineX, chartY + headerHeight + projects.length * rowHeight);
+      ctx.lineTo(timelineX, chartY + headerHeight + exportItems.length * rowHeight);
       ctx.stroke();
 
       ctx.fillStyle = "#475467";
@@ -2097,7 +2307,7 @@
         ctx.strokeStyle = "#e5eaf1";
         ctx.beginPath();
         ctx.moveTo(periodX, chartY);
-        ctx.lineTo(periodX, chartY + headerHeight + projects.length * rowHeight);
+        ctx.lineTo(periodX, chartY + headerHeight + exportItems.length * rowHeight);
         ctx.stroke();
         ctx.fillStyle = "#182033";
         ctx.font = "700 11px Arial, sans-serif";
@@ -2110,52 +2320,24 @@
       });
       ctx.textAlign = "left";
 
-      projects.forEach((project, index) => {
+      exportItems.forEach((entry, index) => {
+        const { type, project, item } = entry;
+        const progress = type === "project" ? getProjectProgress(project) : Number(item.progress) || 0;
         const y = chartY + headerHeight + index * rowHeight;
-        ctx.fillStyle = index % 2 === 0 ? "#ffffff" : "#fbfcfe";
+        ctx.fillStyle = type === "project" ? "#f1f2f2" : (index % 2 === 0 ? "#ffffff" : "#fbfcfe");
         ctx.fillRect(contentX, y, labelWidth + timelineWidth, rowHeight);
-        ctx.strokeStyle = "#dce3ee";
-        ctx.beginPath();
-        ctx.moveTo(contentX, y + rowHeight);
-        ctx.lineTo(contentX + labelWidth + timelineWidth, y + rowHeight);
-        ctx.stroke();
-
-        ctx.fillStyle = "#182033";
-        ctx.font = "700 13px Arial, sans-serif";
-        ctx.fillText(truncateText(ctx, project.name, labelWidth - 28), contentX + 14, y + 22);
-        ctx.fillStyle = "#667085";
-        ctx.font = "12px Arial, sans-serif";
-        ctx.fillText(truncateText(ctx, `${project.member || "Sin asignar"} · ${project.process || "RNO"}`, labelWidth - 28), contentX + 14, y + 42);
-
-        const barStart = model.dateToX(parseDate(project.start));
-        const barEnd = model.dateToX(addDays(parseDate(project.end), 1));
-        const barX = timelineX + barStart + 2;
-        const barY = y + 13;
-        const barWidth = Math.max(8, barEnd - barStart - 4);
-        const barHeight = 30;
-
-        ctx.fillStyle = getMemberColor(project.member || "Sin asignar");
-        ctx.globalAlpha = 0.35;
-        roundedRect(ctx, barX, barY, barWidth, barHeight, 7);
-        ctx.fill();
-        ctx.globalAlpha = 1;
-
-        const progressWidth = barWidth * Math.max(0, Math.min(100, Number(project.progress) || 0)) / 100;
-        if (progressWidth > 0) {
-          ctx.fillStyle = getProcessColor(project.process || "RNO");
-          roundedRect(ctx, barX, barY, progressWidth, barHeight, 7);
-          ctx.fill();
-        }
-
-        ctx.fillStyle = "#0f172a";
-        ctx.font = "700 11px Arial, sans-serif";
-        const barText = `${project.name} · ${project.progress}%`;
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(barX + 7, barY, Math.max(0, barWidth - 14), barHeight);
-        ctx.clip();
-        ctx.fillText(barText, barX + 8, barY + 20);
-        ctx.restore();
+        ctx.strokeStyle = "#dce3ee"; ctx.beginPath(); ctx.moveTo(contentX, y + rowHeight); ctx.lineTo(contentX + labelWidth + timelineWidth, y + rowHeight); ctx.stroke();
+        ctx.fillStyle = "#182033"; ctx.font = type === "project" ? "700 13px Arial, sans-serif" : "12px Arial, sans-serif";
+        const prefix = type === "project" ? "▼ " : "    ↳ ";
+        ctx.fillText(truncateText(ctx, prefix + (item.name || project.name), labelWidth - 28), contentX + 14, y + 22);
+        ctx.fillStyle = "#667085"; ctx.font = "12px Arial, sans-serif";
+        ctx.fillText(truncateText(ctx, type === "project" ? `${project.stages?.length || 0} etapa(s) · ${progress}%` : `${item.member || "Sin asignar"} · ${item.process || "RNO"}`, labelWidth - 28), contentX + 14, y + 42);
+        const barStart=model.dateToX(parseDate(item.start)); const barEnd=model.dateToX(addDays(parseDate(item.end),1));
+        const barX=timelineX+barStart+2, barY=y+13, barWidth=Math.max(8,barEnd-barStart-4), barHeight=30;
+        ctx.fillStyle = type === "project" ? "#c20e2f" : getMemberColor(item.member || project.member); ctx.globalAlpha=.30; roundedRect(ctx,barX,barY,barWidth,barHeight,5); ctx.fill(); ctx.globalAlpha=1;
+        const progressWidth=barWidth*Math.max(0,Math.min(100,progress))/100;
+        if(progressWidth>0){ ctx.fillStyle=type === "project" ? "#c20e2f" : getProcessColor(item.process || project.process); roundedRect(ctx,barX,barY,progressWidth,barHeight,5); ctx.fill(); }
+        ctx.fillStyle="#0f172a"; ctx.font="700 11px Arial, sans-serif"; ctx.save(); ctx.beginPath(); ctx.rect(barX+7,barY,Math.max(0,barWidth-14),barHeight); ctx.clip(); ctx.fillText(`${item.name || project.name} · ${progress}%`,barX+8,barY+20); ctx.restore();
       });
 
       canvas.toBlob(blob => {
@@ -2226,6 +2408,13 @@
 
     els.projectProgress.addEventListener("input", () => {
       els.modalProgressValue.textContent = els.projectProgress.value + "%";
+    });
+
+    els.addStageBtn.addEventListener("click", () => {
+      projectModalStages.push(createEmptyStage({
+        member: els.projectMember.value, start: els.projectStart.value, end: els.projectEnd.value, process: els.projectProcess.value
+      }));
+      renderStageEditor();
     });
 
     [els.filterMember, els.filterStatus, els.filterProcess, els.searchProject, els.ganttScale, els.dayWidth].forEach(control => {
