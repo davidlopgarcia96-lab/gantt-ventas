@@ -732,8 +732,9 @@
           </label>
           <label style="display:flex;align-items:center;gap:8px;">
             Proyecto
-            <input id="ganttFilterProject" list="ganttProjectOptions" placeholder="Todos los proyectos" autocomplete="off" />
-            <datalist id="ganttProjectOptions"></datalist>
+            <select id="ganttFilterProject">
+              <option value="">Todos los proyectos</option>
+            </select>
           </label>
           <label style="display:flex;align-items:center;gap:8px;">
             Vista
@@ -929,7 +930,6 @@
       filterMember: document.getElementById("filterMember"),
       ganttFilterMember: document.getElementById("ganttFilterMember"),
       ganttFilterProject: document.getElementById("ganttFilterProject"),
-      ganttProjectOptions: document.getElementById("ganttProjectOptions"),
       filterStatus: document.getElementById("filterStatus"),
       filterProcess: document.getElementById("filterProcess"),
       searchProject: document.getElementById("searchProject"),
@@ -1253,10 +1253,10 @@
 
     function getGanttProjects() {
       const member = els.ganttFilterMember.value;
-      const projectSearch = els.ganttFilterProject.value.trim().toLowerCase();
+      const projectId = els.ganttFilterProject.value;
       const filtered = state.projects.filter(project => {
         const memberOk = !member || project.member === member;
-        const projectOk = !projectSearch || String(project.name || "").toLowerCase().includes(projectSearch);
+        const projectOk = !projectId || project.id === projectId;
         return memberOk && projectOk;
       });
       return sortProjectsByDate(filtered);
@@ -1290,17 +1290,18 @@
     function renderGanttProjectOptions() {
       const currentValue = els.ganttFilterProject.value;
       const member = els.ganttFilterMember.value;
-      const projectNames = [...new Set(
-        state.projects
-          .filter(project => !member || project.member === member)
-          .map(project => String(project.name || "").trim())
-          .filter(Boolean)
-      )].sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base", numeric: true }));
+      const projects = sortProjectsByDate(
+        state.projects.filter(project => !member || project.member === member)
+      );
 
-      els.ganttProjectOptions.innerHTML = projectNames
-        .map(name => `<option value="${escapeAttribute(name)}"></option>`)
-        .join("");
-      els.ganttFilterProject.value = currentValue;
+      els.ganttFilterProject.innerHTML = '<option value="">Todos los proyectos</option>';
+      projects.forEach(project => {
+        els.ganttFilterProject.add(new Option(project.name || "Proyecto sin nombre", project.id));
+      });
+
+      if (projects.some(project => project.id === currentValue)) {
+        els.ganttFilterProject.value = currentValue;
+      }
     }
 
     function renderSummary() {
@@ -1928,7 +1929,7 @@
       renderGantt();
     });
 
-    els.ganttFilterProject.addEventListener("input", () => {
+    els.ganttFilterProject.addEventListener("change", () => {
       renderSummary();
       renderGantt();
     });
